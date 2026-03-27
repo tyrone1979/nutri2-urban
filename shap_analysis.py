@@ -1,66 +1,102 @@
+import shap
+import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import joblib
-import os
-import warnings
-warnings.filterwarnings('ignore')
 
-import shap
+# ====================== SHAP 分析封装类 ======================
+class SHAPAnalyzer:
+    """
+    用于城乡膳食结构分类的 SHAP 可解释性分析
+    自动计算 SHAP 值 → 绘图 → 保存 → 输出解释
+    """
 
-# ===================== SHAP 分析类（适配最新版 shap 0.51.0）=====================
-class RegionSHAPAnalyzer:
-    def __init__(self, model_dir="./model", fig_dir="./figures"):
-        self.model_dir = model_dir
-        self.fig_dir = fig_dir
-        os.makedirs(fig_dir, exist_ok=True)
+    def __init__(self, model, X_test, feature_names=None):
+        """
+        :param model: 训练好的模型（XGBoost 最佳）
+        :param X_test: 测试集（numpy array）
+        :param feature_names: 特征名列表
+        """
+        self.model = model
+        self.X_test = X_test
+        self.feature_names = feature_names or [
+            "Fat Energy Ratio",
+            "Carbo Energy Ratio",
+            "Protein Energy Ratio",
+            "Fat/Carbo Ratio"
+        ]
 
-    def load_xgb_model(self):
-        """ 加载你训练好的 4区域 XGBoost 模型 """
-        model_path = os.path.join(self.model_dir, "XGBoost.pkl")
-        model = joblib.load(model_path)
-        return model
+        # 转 DataFrame 便于 SHAP 绘图
+        self.X_test_df = pd.DataFrame(
+            self.X_test,
+            columns=self.feature_names
+        )
 
-    def get_ratio_features(self):
-        """ 🔥 只读取【供能比特征】，不包含任何营养素总量 """
-        df = pd.read_sas("./data/c12diet.sas7bdat")
-        df.columns = df.columns.str.upper()
-        df = df[['D3KCAL', 'D3CARBO', 'D3FAT', 'D3PROTN', 'T1']].dropna()
-        df = df[(df['D3KCAL'] > 500) & (df['D3KCAL'] < 5000)]
+        # SHAP 解释器
+        self.explainer = shap.TreeExplainer(self.model)
+        self.shap_values = None
 
-        # 计算供能比
-        df['fat_energy_ratio'] = (df['D3FAT'] * 9) / df['D3KCAL']
-        df['carbo_energy_ratio'] = (df['D3CARBO'] * 4) / df['D3KCAL']
-        df['protn_energy_ratio'] = (df['D3PROTN'] * 4) / df['D3KCAL']
-        df['fat_carbo_ratio'] = df['D3FAT'] / (df['D3CARBO'] + 1e-6)
+    def compute_shap_values(self):
+        """计算 SHAP 值"""
+        self.shap_values = self.explainer.shap_values(self.X_test_df)
+        return self
 
-        # 只保留这4个特征
-        X = df[['fat_energy_ratio', 'carbo_energy_ratio', 'protn_energy_ratio', 'fat_carbo_ratio']]
-        return X
-
-    def run_shap(self):
-        model = self.load_xgb_model()
-        X = self.get_ratio_features()
-
-        # ===================== 🔥 最新 SHAP 0.51 正确用法 =====================
-        explainer = shap.Explainer(model, X)
-        shap_values = explainer(X)
-
-        # 1. 画 SHAP 摘要图
+    def plot_summary(self, save_path="./figures/shap_summary.png"):
+        """SHAP 总览图（特征重要性）"""
         plt.figure(figsize=(8, 5))
-        shap.summary_plot(shap_values, X, show=False)
-        plt.savefig(os.path.join(self.fig_dir, "shap_region_ratios.png"), dpi=300, bbox_inches='tight')
+        shap.summary_plot(
+            self.shap_values,
+            self.X_test_df,
+            show=False
+        )
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close()
+        print(f"✅ SHAP 总览图已保存：{save_path}")
 
-        # 2. 画特征重要性条形图
-        plt.figure(figsize=(8, 5))
-        shap.summary_plot(shap_values, X, plot_type="bar", show=False)
-        plt.savefig(os.path.join(self.fig_dir, "shap_region_importance.png"), dpi=300, bbox_inches='tight')
+    def plot_force_single(self, sample_idx=0, save_path="./figures/shap_force.png"):
+        """单样本 force plot"""
+        shap.force_plot(
+            self.explainer.expected_value,
+            self.shap_values[sample_idx, :],
+            self.X_test_df.iloc[sample_idx, :],
+            matplotlib=True,
+            show=False
+        )
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close()
+        print(f"✅ SHAP 单样本图已保存：{save_path}")
 
-        print("✅ SHAP 分析完成！图片已保存到：./figures/")
+    def plot_dependence(self, feature_idx=0, save_path="./figures/shap_dependence.png"):
+        """SHAP 依赖图（特征影响趋势）"""
+        shap.dependence_plot(
+            feature_idx,
+            self.shap_values,
+            self.X_test_df,
+            show=False
+        )
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close()
+        print(f"✅ SHAP 依赖图已保存：{save_path}")
 
-# ===================== 运行 =====================
+    def run_all(self):
+        """一键运行所有 SHAP 分析"""
+        self.compute_shap_values()
+        self.plot_summary()
+        self.plot_force_single()
+        self.plot_dependence(feature_idx=0)
+        print("\n🎉 SHAP 全部分析完成！")
+
+# ====================== 调用 SHAP 分析 ======================
 if __name__ == "__main__":
-    analyzer = RegionSHAPAnalyzer()
-    analyzer.run_shap()
+    # 1. 训练完你的模型（xgb）
+    # ...（你的训练代码）
+
+    # 2. 初始化 SHAP 分析器
+    shap_analyzer = SHAPAnalyzer(
+        model=xgb,                  # 你的模型
+        X_test=X_test,              # 测试集
+        feature_names=None          # 自动使用标准膳食特征名
+    )
+
+    # 3. 一键运行所有分析 + 出图
+    shap_analyzer.run_all()

@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 
-from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -10,13 +9,21 @@ from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import shap
+import matplotlib.pyplot as plt
+from torch.utils.data import Dataset, DataLoader
 
-# ===================== 1. 数据加载类 =====================
+# ===================== Data Loader =====================
 class DataPipeline:
     def __init__(self, path="./data/c12diet.sas7bdat"):
         self.path = path
-        self.df = None
         self.X_train, self.X_test, self.y_train, self.y_test = None, None, None, None
+        self.feature_names = [
+            "Fat_Energy_Ratio",
+            "Carbo_Energy_Ratio",
+            "Protein_Energy_Ratio",
+            "Fat_Carbo_Ratio"
+        ]
 
     def load(self):
         df = pd.read_sas(self.path)
@@ -24,10 +31,7 @@ class DataPipeline:
         df = df[['T2', 'D3KCAL', 'D3CARBO', 'D3FAT', 'D3PROTN']].dropna()
         df = df[(df.D3KCAL > 500) & (df.D3KCAL < 5000)]
 
-        # 城乡标签
         df['is_urban'] = df['T2'].apply(lambda x: 1 if x == 1 else 0)
-
-        # 4个供能比
         df['fat_pct'] = df.D3FAT * 9 / df.D3KCAL
         df['carbo_pct'] = df.D3CARBO * 4 / df.D3KCAL
         df['protn_pct'] = df.D3PROTN * 4 / df.D3KCAL
@@ -42,26 +46,39 @@ class DataPipeline:
         return self
 
 
-# ===================== 2. 传统机器学习模型类 =====================
+# ===================== ML Models =====================
 class MLModels:
-    def __init__(self, X_train, X_test, y_train, y_test):
+    def __init__(self, X_train, X_test, y_train, y_test, result_path="./results/model_results.csv"):
         self.X_train = X_train
         self.X_test = X_test
         self.y_train = y_train
         self.y_test = y_test
         self.results = {}
+        self.trained_models = {}
+        self.result_path = result_path
+
+        # 如果结果已存在，直接加载
+        if os.path.exists(self.result_path):
+            self.results = pd.read_csv(self.result_path, index_col=0).to_dict(orient="index")
+            print("✅ 已加载历史结果，跳过训练")
 
     def logistic_regression(self):
-        m = LogisticRegression(max_iter=5000)
-        return self._train_eval(m, "Logistic Regression")
+        if "Logistic_Regression" in self.results:
+            return self
+        model = LogisticRegression(max_iter=5000)
+        return self._train_eval(model, "Logistic_Regression")
 
     def random_forest(self):
-        m = RandomForestClassifier(300, max_depth=6)
-        return self._train_eval(m, "Random Forest")
+        if "Random_Forest" in self.results:
+            return self
+        model = RandomForestClassifier(n_estimators=300, max_depth=6)
+        return self._train_eval(model, "Random_Forest")
 
     def xgboost(self):
-        m = XGBClassifier(300, max_depth=4, learning_rate=0.1)
-        return self._train_eval(m, "XGBoost")
+        if "XGBoost" in self.results:
+            return self
+        model = XGBClassifier(n_estimators=300, max_depth=4, learning_rate=0.1, objective='binary:logistic')
+        return self._train_eval(model, "XGBoost")
 
     def _train_eval(self, model, name):
         model.fit(self.X_train, self.y_train)
@@ -72,11 +89,12 @@ class MLModels:
             "F1": round(f1_score(self.y_test, yp), 3),
             "AUC": round(roc_auc_score(self.y_test, ypb), 3)
         }
+        self.trained_models[name] = model
         return self
 
 
-# ===================== 3. PyTorch MLP 模型类 =====================
-class TorchMLP(nn.Module):
+# ===================== PyTorch MLP =====================
+class MLP(nn.Module):
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
@@ -97,26 +115,22 @@ class TorchTrainer:
         self.y_test = y_test
 
     def train(self, epochs=30):
-        class Ds(Dataset):
+        class DS(Dataset):
             def __init__(self, x, y):
                 self.x = torch.tensor(x, dtype=torch.float32)
                 self.y = torch.tensor(y, dtype=torch.float32).reshape(-1, 1)
 
-            def __len__(self):
-                return len(self.x)
+            def __len__(self): return len(self.x)
+            def __getitem__(self, i): return self.x[i], self.y[i]
 
-            def __getitem__(self, i):
-                return self.x[i], self.y[i]
-
-        train_loader = DataLoader(Ds(self.X_train, self.y_train), batch_size=32, shuffle=True)
+        loader = DataLoader(DS(self.X_train, self.y_train), batch_size=32, shuffle=True)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = TorchMLP().to(device)
+        model = MLP().to(device)
         loss_fn = nn.BCELoss()
         opt = optim.Adam(model.parameters(), lr=1e-3)
 
-        model.train()
         for _ in range(epochs):
-            for bx, by in train_loader:
+            for bx, by in loader:
                 bx, by = bx.to(device), by.to(device)
                 loss = loss_fn(model(bx), by)
                 opt.zero_grad()
@@ -135,27 +149,45 @@ class TorchTrainer:
         }
 
 
-# ===================== 4. 主执行类 =====================
+# ===================== SHAP Analyzer =====================
+class SHAPAnalyzer:
+    def __init__(self, model, X_test, feature_names):
+        self.model = model
+        self.X_test = pd.DataFrame(X_test, columns=feature_names)
+        self.explainer = shap.TreeExplainer(model)
+        self.shap_values = None
+
+    def run(self):
+        self.shap_values = self.explainer.shap_values(self.X_test)
+        shap.summary_plot(self.shap_values, self.X_test, show=False)
+        plt.savefig("./figures/shap_summary.png", dpi=300, bbox_inches='tight')
+        plt.close()
+        print("✅ SHAP 图已保存至 ./figures/shap_summary.png")
+
+
+# ===================== Main Trainer =====================
 class Trainer:
     def run(self):
-        # 1. 加载数据
-        data = DataPipeline().load()
+        import os
+        os.makedirs("./results", exist_ok=True)
+        os.makedirs("./figures", exist_ok=True)
 
-        # 2. 传统模型
+        data = DataPipeline().load()
         ml = MLModels(data.X_train, data.X_test, data.y_train, data.y_test)
         ml.logistic_regression().random_forest().xgboost()
 
-        # 3. 深度学习
         torch_res = TorchTrainer(data.X_train, data.X_test, data.y_train, data.y_test).train()
-        ml.results["PyTorch MLP"] = torch_res
+        ml.results["PyTorch_MLP"] = torch_res
 
-        # 输出
-        print("\n" + "=" * 60)
-        print("📊 城乡分类模型对比 Urban vs Rural")
-        print("=" * 60)
         res_df = pd.DataFrame(ml.results).T
+        print("\n" + "=" * 60)
+        print("📊 城乡分类模型结果")
+        print("=" * 60)
         print(res_df)
-        res_df.to_csv("./results/model_comparison.csv", index=True, encoding="utf-8-sig")
+        res_df.to_csv("./results/model_results.csv", encoding="utf-8-sig")
+
+        # SHAP for XGBoost
+        SHAPAnalyzer(ml.trained_models["XGBoost"], data.X_test, data.feature_names).run()
 
 
 if __name__ == "__main__":
