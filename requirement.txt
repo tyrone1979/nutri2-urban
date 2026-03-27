@@ -3,4 +3,5 @@ matplotlib
 seaborn
 scikit-learn
 shap
-torch
+xgboost
+torch torchaudio torchvision
