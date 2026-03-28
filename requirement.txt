@@ -4,4 +4,7 @@ seaborn
 scikit-learn
 shap
 xgboost
-torch torchaudio torchvision
+torch
+torchaudio
+torchvision
+pandas

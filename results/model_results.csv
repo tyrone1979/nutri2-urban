@@ -1,5 +1,0 @@
-﻿,Acc,F1,AUC
-Logistic_Regression,0.698,0.379,0.696
-Random_Forest,0.699,0.411,0.7
-XGBoost,0.697,0.408,0.698
-PyTorch_MLP,0.698,0.378,0.697
