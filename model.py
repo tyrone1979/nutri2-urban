@@ -1,8 +1,33 @@
+#!/usr/bin/env python3
+# ===================== 必须在最开头！Apple Silicon + Python 3.13 防卡死 =====================
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
+# 🔥 关键：禁用所有 Python multiprocessing（Python 3.13 在 Apple Silicon 上有严重问题）
+import multiprocessing
+
+multiprocessing.set_start_method('spawn', force=True)
+
+# 现在安全导入 torch
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+torch.set_num_threads(1)
+
+# 其他导入
 import pandas as pd
 import numpy as np
 import time
-import joblib  # 用于保存模型
-import os
+import joblib
+import glob
+import warnings
+from tqdm import tqdm
 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -10,25 +35,22 @@ from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-
 import shap
 import matplotlib.pyplot as plt
+
+warnings.filterwarnings('ignore')
 
 # ===================== 全局配置 =====================
 plt.rcParams["font.sans-serif"] = ["Arial"]
 plt.rcParams["axes.unicode_minus"] = False
 
-# 路径配置
 DATA_PATH = "./data/c12diet.sas7bdat"
 RESULT_PATH = "./results/model_results.csv"
-MODEL_SAVE_DIR = "./saved_models"  # 模型保存目录
+MODEL_SAVE_DIR = "./saved_models"
 FIGURE_DIR = "./figures"
 
-# ===================== Data Loader =====================
+
+# ===================== Data Pipeline（优化版：使用 pyreadstat 替代 pandas）=====================
 class DataPipeline:
     def __init__(self, path=DATA_PATH):
         self.path = path
@@ -37,7 +59,19 @@ class DataPipeline:
 
     def load(self):
         print("[1/5] 正在加载数据...")
-        df = pd.read_sas(self.path)
+        if not os.path.exists(self.path):
+            raise FileNotFoundError(f"数据文件不存在: {self.path}")
+
+        # 🔥 优化：尝试使用 pyreadstat（更快），失败则回退到 pandas
+        try:
+            import pyreadstat
+            print("   使用 pyreadstat 读取（更快）...")
+            df, meta = pyreadstat.read_sas7bdat(self.path)
+        except ImportError:
+            print("   pyreadstat 未安装，使用 pandas.read_sas（较慢）...")
+            print("   💡 建议: pip install pyreadstat 加速读取")
+            df = pd.read_sas(self.path, encoding='utf-8')
+
         df.columns = df.columns.str.upper()
         df = df[['T2', 'D3KCAL', 'D3CARBO', 'D3FAT', 'D3PROTN']].dropna()
         df = df[(df.D3KCAL > 500) & (df.D3KCAL < 5000)]
@@ -54,11 +88,11 @@ class DataPipeline:
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X, y, test_size=0.2, random_state=42, stratify=y
         )
-        print("✅ 数据加载与预处理完成\n")
+        print(f"✅ 数据加载完成 | 训练集: {len(self.X_train)} | 测试集: {len(self.X_test)}\n")
         return self
 
 
-# ===================== ML Models（带模型保存 + 进度） =====================
+# ===================== ML Models =====================
 class MLModels:
     def __init__(self, X_train, X_test, y_train, y_test, result_path=RESULT_PATH):
         self.X_train = X_train
@@ -66,79 +100,112 @@ class MLModels:
         self.y_train = y_train
         self.y_test = y_test
         self.results = {}
-        self.trained_models = {}  # 保存所有训练好的模型
+        self.trained_models = {}
         self.result_path = result_path
-
-        # 自动创建目录
         os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
+        self._load_existing_results_and_models()
 
-        # 加载历史结果
+    def _load_existing_results_and_models(self):
+        """加载历史结果和对应的模型文件"""
         if os.path.exists(self.result_path):
-            self.results = pd.read_csv(self.result_path, index_col=0).to_dict(orient="index")
-            print("✅ 已加载历史模型结果，跳过重复训练\n")
+            try:
+                self.results = pd.read_csv(self.result_path, index_col=0).to_dict(orient="index")
+                print("✅ 已加载历史模型结果")
+            except Exception as e:
+                print(f"⚠️ 加载结果文件失败: {e}")
+
+        model_files = {
+            "Logistic_Regression": "Logistic_Regression.pkl",
+            "Random_Forest": "Random_Forest.pkl",
+            "XGBoost": "XGBoost.pkl"
+        }
+
+        loaded = []
+        for name, file in model_files.items():
+            path = f"{MODEL_SAVE_DIR}/{file}"
+            if os.path.exists(path):
+                try:
+                    self.trained_models[name] = joblib.load(path)
+                    loaded.append(name)
+                except Exception as e:
+                    print(f"⚠️ 加载 {name} 失败: {e}")
+
+        if loaded:
+            print(f"✅ 已加载模型: {', '.join(loaded)}")
+            print("💡 删除 ./saved_models/ 下的 .pkl 文件可强制重新训练\n")
+
+    def _should_train(self, name):
+        if name in self.results and name in self.trained_models:
+            print(f"⏭️  {name}: 已存在，跳过")
+            return False
+        return True
 
     def logistic_regression(self):
-        if "Logistic_Regression" in self.results:
+        if not self._should_train("Logistic_Regression"):
             return self
-        print("[2/5] 正在训练 Logistic Regression...")
+        print("[2/5] 训练 Logistic Regression...")
         model = LogisticRegression(max_iter=5000)
         return self._train_eval(model, "Logistic_Regression")
 
     def random_forest(self):
-        if "Random_Forest" in self.results:
+        if not self._should_train("Random_Forest"):
             return self
-        print("[2/5] 正在训练 Random Forest...")
-        model = RandomForestClassifier(n_estimators=300, max_depth=6, random_state=42)
+        print("[2/5] 训练 Random Forest...")
+        model = RandomForestClassifier(n_estimators=300, max_depth=6, random_state=42, n_jobs=1)
         return self._train_eval(model, "Random_Forest")
 
     def xgboost(self):
-        if "XGBoost" in self.results:
+        if not self._should_train("XGBoost"):
             return self
-        print("[2/5] 正在训练 XGBoost...")
+        print("[2/5] 训练 XGBoost...")
         model = XGBClassifier(n_estimators=300, max_depth=4, learning_rate=0.1,
-                              objective='binary:logistic', random_state=42)
+                              objective='binary:logistic', random_state=42, n_jobs=1)
         return self._train_eval(model, "XGBoost")
 
     def _train_eval(self, model, name):
-        # 训练
+        start = time.time()
         model.fit(self.X_train, self.y_train)
+        train_time = time.time() - start
 
-        # 预测评估
         yp = model.predict(self.X_test)
         ypb = model.predict_proba(self.X_test)[:, 1]
 
-        # 保存指标
         self.results[name] = {
             "Acc": round(accuracy_score(self.y_test, yp), 3),
             "F1": round(f1_score(self.y_test, yp), 3),
-            "AUC": round(roc_auc_score(self.y_test, ypb), 3)
+            "AUC": round(roc_auc_score(self.y_test, ypb), 3),
+            "Time(s)": round(train_time, 2)
         }
-
-        # 保存模型到内存 + 本地文件
         self.trained_models[name] = model
         joblib.dump(model, f"{MODEL_SAVE_DIR}/{name}.pkl")
-        print(f"✅ {name} 训练完成 | Acc: {self.results[name]['Acc']}")
+        print(f"✅ {name} 完成 | Acc: {self.results[name]['Acc']:.3f} | 耗时: {train_time:.1f}s")
         return self
 
-    def load_saved_models(self):
-        """加载本地保存的所有模型（复用）"""
-        model_names = ["Logistic_Regression", "Random_Forest", "XGBoost"]
-        for name in model_names:
-            path = f"{MODEL_SAVE_DIR}/{name}.pkl"
-            if os.path.exists(path):
-                self.trained_models[name] = joblib.load(path)
-        print("✅ 所有本地模型加载完成")
-        return self.trained_models
+    def force_retrain(self):
+        """强制重新训练"""
+        print("\n🗑️  清除历史模型文件...")
+        files = glob.glob(f"{MODEL_SAVE_DIR}/*.pkl") + [self.result_path]
+        for f in files:
+            if os.path.exists(f):
+                os.remove(f)
+                print(f"   删除: {os.path.basename(f)}")
+        self.results = {}
+        self.trained_models = {}
+        print("✅ 已清除，将重新训练\n")
+        return self
 
 
-# ===================== PyTorch MLP（带进度） =====================
+# ===================== PyTorch MLP（Apple Silicon + Python 3.13 终极修复版）=====================
 class MLP(nn.Module):
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(4, 16), nn.ReLU(),
-            nn.Linear(16, 8), nn.ReLU(),
-            nn.Linear(8, 1), nn.Sigmoid()
+            nn.Linear(4, 16),
+            nn.ReLU(),
+            nn.Linear(16, 8),
+            nn.ReLU(),
+            nn.Linear(8, 1),
+            nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -152,52 +219,98 @@ class TorchTrainer:
         self.y_train = y_train
         self.y_test = y_test
         self.model = None
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cpu")
+        self.model_path = f"{MODEL_SAVE_DIR}/PyTorch_MLP.pth"
+        os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
 
-    def train(self, epochs=30):
-        print(f"\n[3/5] 开始训练 PyTorch MLP (设备: {self.device})")
-        class DS(Dataset):
-            def __init__(self, x, y):
-                self.x = torch.tensor(x, dtype=torch.float32)
-                self.y = torch.tensor(y, dtype=torch.float32).reshape(-1, 1)
-            def __len__(self): return len(self.x)
-            def __getitem__(self, i): return self.x[i], self.y[i]
+    def load_model(self):
+        if os.path.exists(self.model_path):
+            print(f"\n[3/5] 发现已保存的PyTorch MLP模型，正在加载...")
+            self.model = MLP().to(self.device)
+            self.model.load_state_dict(torch.load(self.model_path, map_location=self.device))
+            print("✅ PyTorch MLP模型加载完成")
+            return self._evaluate()
+        return False
 
-        loader = DataLoader(DS(self.X_train, self.y_train), batch_size=32, shuffle=True)
+    def train(self, epochs=30, batch_size=32):
+        load_res = self.load_model()
+        if load_res:
+            return load_res, self.model
+
+        print(f"\n[3/5] 开始训练 PyTorch MLP | 轮次: {epochs} | 批次: {batch_size}")
+        print(f"📱 设备: {self.device} | 线程: {torch.get_num_threads()}")
+        print("⚠️  使用手动batch循环（禁用DataLoader防止卡死）\n")
+
         self.model = MLP().to(self.device)
         loss_fn = nn.BCELoss()
         opt = optim.Adam(self.model.parameters(), lr=1e-3)
 
+        # 🔥 终极修复：完全不用 DataLoader，纯手动 batch（避免 Python 3.13 multiprocessing bug）
+        n_samples = len(self.X_train)
+        n_batches = (n_samples + batch_size - 1) // batch_size
+
+        # 预转换张量（只转换一次）
+        X_tensor = torch.tensor(self.X_train, dtype=torch.float32).to(self.device)
+        y_tensor = torch.tensor(self.y_train, dtype=torch.float32).reshape(-1, 1).to(self.device)
+
+        print(f"📊 样本数: {n_samples} | 每轮 batches: {n_batches}")
+
+        # 外层 epoch 进度条
         for epoch in range(epochs):
             self.model.train()
-            total_loss = 0
-            for bx, by in loader:
-                bx, by = bx.to(self.device), by.to(self.device)
-                loss = loss_fn(self.model(bx), by)
+
+            # 手动 shuffle（PyTorch 原生，无 numpy 依赖）
+            indices = torch.randperm(n_samples, device=self.device)
+            total_loss = 0.0
+
+            # 内层 batch 进度条（使用简单 print 避免 tqdm 在 PyCharm 中的刷新问题）
+            print(f"\n🔄 Epoch {epoch + 1}/{epochs} ", end="")
+
+            for i in range(n_batches):
+                start_idx = i * batch_size
+                end_idx = min(start_idx + batch_size, n_samples)
+
+                # 直接切片
+                batch_idx = indices[start_idx:end_idx]
+                bx = X_tensor[batch_idx]
+                by = y_tensor[batch_idx]
+
+                # 训练步骤
+                pred = self.model(bx)
+                loss = loss_fn(pred, by)
+
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
+
                 total_loss += loss.item()
 
-            if (epoch + 1) % 5 == 0:
-                print(f"  Epoch {epoch+1:2d}/{epochs} | Loss: {total_loss:.4f}")
+                # 进度指示（每10个batch显示一个点）
+                if (i + 1) % max(1, n_batches // 10) == 0:
+                    print(".", end="", flush=True)
 
-        # 评估
+            avg_loss = total_loss / n_batches
+            print(f" | Loss: {avg_loss:.4f}")
+
+        res = self._evaluate()
+        self.save_model()
+        print(f"\n🎉 PyTorch MLP 完成 | Acc: {res['Acc']:.3f} | F1: {res['F1']:.3f} | AUC: {res['AUC']:.3f}")
+        return res, self.model
+
+    def _evaluate(self):
         self.model.eval()
         with torch.no_grad():
-            ypb = self.model(torch.tensor(self.X_test, dtype=torch.float32).to(self.device)).cpu().numpy().flatten()
+            xt = torch.tensor(self.X_test, dtype=torch.float32).to(self.device)
+            ypb = self.model(xt).cpu().numpy().flatten()
         yp = (ypb > 0.5).astype(int)
-
-        res = {
+        return {
             "Acc": round(accuracy_score(self.y_test, yp), 3),
             "F1": round(f1_score(self.y_test, yp), 3),
             "AUC": round(roc_auc_score(self.y_test, ypb), 3)
         }
-        print(f"✅ PyTorch MLP 训练完成 | Acc: {res['Acc']}\n")
-        return res, self.model
 
-    def save_model(self, path=f"{MODEL_SAVE_DIR}/PyTorch_MLP.pth"):
-        torch.save(self.model.state_dict(), path)
+    def save_model(self, path=None):
+        torch.save(self.model.state_dict(), path or self.model_path)
 
 
 # ===================== SHAP Analyzer =====================
@@ -209,53 +322,48 @@ class SHAPAnalyzer:
         self.shap_values = None
 
     def run(self):
-        print("[4/5] 正在生成 SHAP 特征重要性图...")
+        print("\n[4/5] 生成 SHAP 特征重要性图...")
         self.shap_values = self.explainer.shap_values(self.X_test)
         shap.summary_plot(self.shap_values, self.X_test, show=False)
         plt.savefig(f"{FIGURE_DIR}/shap_summary.png", dpi=300, bbox_inches='tight')
         plt.close()
-        print("✅ SHAP 图已保存\n")
+        print("✅ SHAP 图已保存")
 
 
 # ===================== Main Trainer =====================
 class Trainer:
-    def run(self):
-        # 创建目录
+    def run(self, force_retrain=False):
         os.makedirs(FIGURE_DIR, exist_ok=True)
         os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
         os.makedirs("./results", exist_ok=True)
 
-        # 1. 数据
         data = DataPipeline().load()
 
-        # 2. 机器学习模型
         ml = MLModels(data.X_train, data.X_test, data.y_train, data.y_test)
+
+        if force_retrain:
+            ml.force_retrain()
+
         ml.logistic_regression().random_forest().xgboost()
 
-        # 3. 深度学习模型
         torch_res, torch_model = TorchTrainer(
             data.X_train, data.X_test, data.y_train, data.y_test
         ).train()
         ml.results["PyTorch_MLP"] = torch_res
 
-        # 输出结果
         res_df = pd.DataFrame(ml.results).T
-        print("\n" + "=" * 60)
+        print("\n" + "=" * 65)
         print("📊 城乡饮食分类模型 - 所有模型结果")
-        print("=" * 60)
-        print(res_df)
+        print("=" * 65)
+        print(res_df.to_string())
         res_df.to_csv("./results/model_results.csv", encoding="utf-8-sig")
 
-        # 4. SHAP分析
         SHAPAnalyzer(ml.trained_models["XGBoost"], data.X_test, data.feature_names).run()
 
-        # 5. 保存全部模型
-        print("[5/5] 保存所有训练好的模型到本地...")
+        print("\n[5/5] 保存所有模型...")
         joblib.dump(ml.trained_models, f"{MODEL_SAVE_DIR}/all_ml_models.pkl")
-        print("✅ 所有模型已保存至：./saved_models/\n")
-        print("🎉 全部任务运行完成！")
+        print("🎉 全部完成！\n")
 
-        # 返回所有训练好的模型，方便后续直接使用
         return {
             "ml_models": ml.trained_models,
             "mlp_model": torch_model,
@@ -266,10 +374,11 @@ class Trainer:
 
 # ===================== 运行入口 =====================
 if __name__ == "__main__":
-    # 运行训练，返回所有模型
-    assets = Trainer().run()
+    # 再次确保 spawn 模式
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass
 
-    # ============= 后续直接使用已训练好的模型 =============
-    # 示例：直接调用XGBoost模型预测
-    # xgb_model = assets["ml_models"]["XGBoost"]
-    # y_pred = xgb_model.predict(assets["data"].X_test)
+    # 运行训练
+    assets = Trainer().run(force_retrain=False)
