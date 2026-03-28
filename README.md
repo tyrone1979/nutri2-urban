@@ -16,7 +16,7 @@ The study uses data from the China Health and Nutrition Survey (CHNS), a longitu
 **Dataset Details**  
 - Survey period: 1991–2011 (8 survey waves, as 1989 wave was excluded due to data quality concerns)  
 - Total observations (after quality control): **98,247** (42.0% urban, 58.0% rural)  
-- Key variables: Total energy intake (kcal), carbohydrate intake (g), fat intake (g), protein intake (g), and urban-rural classification (T2: 1 = urban, 2 = rural)
+- Key variables: Total energy intake (kcal), carbohydrate intake (g), fat intake (g), protein intake (g), urban-rural classification (T2: 1 = urban, 2 = rural), province (T1), and survey year (WAVE)
 
 **Quality Control Criteria**  
 - Exclude observations with missing values for key nutrient variables.  
@@ -24,6 +24,7 @@ The study uses data from the China Health and Nutrition Survey (CHNS), a longitu
 
 ## Feature Construction
 
+### Dietary Features (Energy Ratios)
 Four dietary features were constructed to characterize dietary structure (independent of total energy intake):
 
 1. **Fat Energy Ratio (FatER)**: Proportion of total energy derived from fat (9 kcal/g).  
@@ -39,6 +40,15 @@ Four dietary features were constructed to characterize dietary structure (indepe
    $$\text{FCR} = \frac{\text{D3FAT}}{\text{D3CARBO} + \epsilon}$$  
    (where $$\epsilon = 10^{-6}$$ to avoid division by zero).
 
+### Temporal and Geographic Features
+To capture the effects of time and regional variation, two additional features are included in the machine learning models:
+
+5. **Year (WAVE)**: Survey year (1991, 1993, 1997, 2000, 2004, 2006, 2009, 2011). This feature accounts for temporal trends in dietary patterns, such as the overall shift toward higher fat consumption over the study period.
+
+6. **Province (T1)**: Geographic region encoded as a categorical variable with 12 major provinces (Beijing, Shanghai, Chongqing, Jiangsu, Shandong, Henan, Hubei, Hunan, Guangxi, Guizhou, Liaoning, Heilongjiang). This feature captures regional dietary traditions, economic development levels, and food availability differences.
+
+In the machine learning pipeline, these features are standardized (Year and Province_Code) to ensure comparability across variables.
+
 ## Methodology
 
 The study integrates statistical analysis and machine learning, with the following key components:
@@ -47,12 +57,12 @@ The study integrates statistical analysis and machine learning, with the followi
 One-way Analysis of Variance (ANOVA) was used to test the significance of dietary differences between urban and rural groups. The F-statistic was calculated to compare between-group and within-group variance, with a p-value < 0.001 considered statistically significant. Analyses were conducted at both national and provincial levels, and temporal trends were examined across survey years.
 
 ### 2. Machine Learning Classification
-A binary classification task was designed to predict urban/rural status using the four dietary features. The dataset was split into training (80%) and testing (20%) sets with stratification to preserve class distribution. Four models were trained and evaluated:
+A binary classification task was designed to predict urban/rural status using **six input features**: the four dietary energy ratios, survey year, and province. The dataset was split into training (80%) and testing (20%) sets with stratification to preserve class distribution. Four models were trained and evaluated:
 
 - **Logistic Regression (LR)**: Linear model with maximum 5,000 iterations for convergence.  
 - **Random Forest (RF)**: Ensemble model with 300 trees and maximum depth of 6.  
 - **XGBoost (XGB)**: Gradient-boosted tree model with 300 boosting rounds, max depth 4, and learning rate 0.1.  
-- **Multi-Layer Perceptron (MLP)**: Neural network (PyTorch) with input layer (4 features), two hidden layers (16, 8 neurons with ReLU activation), and output layer (sigmoid activation for binary classification). Trained for 30 epochs with Adam optimizer (lr = 1e-3) and BCE loss.
+- **Multi-Layer Perceptron (MLP)**: Neural network (PyTorch) with input layer (6 features), two hidden layers (16, 8 neurons with ReLU activation), and output layer (sigmoid activation for binary classification). Trained for 30 epochs with Adam optimizer (lr = 1e-3) and BCE loss.
 
 ### 3. Model Evaluation Metrics
 - **Accuracy**: Proportion of correctly classified instances.  
@@ -75,7 +85,7 @@ All four dietary features showed highly significant differences between urban an
 | Fat-to-Carb Ratio | 6277.49 | < 0.001 | *** |
 
 ### Model Performance
-All models achieved comparable performance with AUC values ranging from **0.696 to 0.709**. XGBoost slightly outperformed others in AUC (0.733) and F1 score (0.458), while Random Forest achieved the highest accuracy (0.703). The results indicate that dietary structure alone can moderately discriminate between urban and rural populations, supporting the validity of the constructed features.
+All models achieved comparable performance with AUC values ranging from **0.702 to 0.733**. XGBoost slightly outperformed others in AUC (0.733) and F1 score (0.458), while Random Forest achieved the highest accuracy (0.703). The inclusion of Year and Province as features improved model discriminative power compared to using only dietary ratios, confirming that temporal and geographic contexts are important predictors of urban-rural dietary differences.
 
 | Model | Accuracy | F1 Score | AUC | Training Time (s) |
 |-------|----------|---------|-----|-------------------|
@@ -88,11 +98,12 @@ All models achieved comparable performance with AUC values ranging from **0.696 
 The SHAP analysis identified **Carbohydrate Energy Ratio (CarbER)** and **Fat Energy Ratio (FatER)** as the most influential features:
 - Higher CarbER → Negative SHAP values (predicts rural status).  
 - Higher FatER → Positive SHAP values (predicts urban status).  
-- Protein Energy Ratio and Fat-to-Carb Ratio also contributed but to a lesser extent.
+- **Year** and **Province** also contributed meaningfully, with later years and economically developed provinces (e.g., Shanghai, Beijing) showing positive SHAP contributions (urban prediction), while earlier years and less developed provinces (e.g., Henan, Guizhou) showed negative contributions (rural prediction).  
+- Protein Energy Ratio and Fat-to-Carb Ratio contributed to a lesser extent.
 
 Stratified SHAP analyses revealed:
-- **By Year**: The importance of CarbER and FatER remained stable over time, but their marginal effects shifted, reflecting dietary convergence in some features.  
-- **By Province**: SHAP values varied across provinces, with Henan and Jiangsu showing the strongest feature effects, indicating regional heterogeneity in dietary drivers.
+- **By Year**: The importance of CarbER and FatER remained stable over time, but their marginal effects shifted, reflecting dietary convergence in some features. The contribution of Year itself was nonlinear, with the 2000s showing stronger urban-predicting effects.  
+- **By Province**: SHAP values varied across provinces, with Henan and Jiangsu showing the strongest feature effects, indicating regional heterogeneity in dietary drivers. Province contributed more in regions with distinct dietary traditions.
 
 ## Repository Structure
 
@@ -114,11 +125,22 @@ The code is organized into modular classes for reusability and clarity:
 
 - **`analysis.py`** – Performs descriptive statistics, ANOVA, and generates visualizations (heatmaps, bar charts, temporal trends, provincial comparisons).  
 - **`model.py`** – Contains the full machine learning pipeline:  
-  - `DataPipeline`: Loads and preprocesses data, constructs features, and splits data.  
+  - `DataPipeline`: Loads and preprocesses data, constructs dietary features, encodes province, includes Year, and splits data.  
   - `MLModels`: Trains and evaluates LR, RF, and XGBoost models.  
   - `TorchTrainer`: Trains the MLP neural network.  
   - `SHAPAnalyzer`: Computes SHAP values and generates interpretability plots.  
   - `Trainer`: Orchestrates the entire workflow.
+
+## Feature Summary
+
+| Feature | Variable in CHNS | Description | Type |
+|---------|------------------|-------------|------|
+| Fat Energy Ratio | D3FAT, D3KCAL | (Fat × 9) / Total Energy | Continuous |
+| Carbohydrate Energy Ratio | D3CARBO, D3KCAL | (Carb × 4) / Total Energy | Continuous |
+| Protein Energy Ratio | D3PROTN, D3KCAL | (Protein × 4) / Total Energy | Continuous |
+| Fat-to-Carb Ratio | D3FAT, D3CARBO | Fat / (Carb + ε) | Continuous |
+| Year | WAVE | Survey wave (1991–2011) | Continuous (standardized) |
+| Province | T1 | Geographic region (12 provinces) | Categorical (encoded) |
 
 ## Requirements
 
@@ -149,7 +171,8 @@ This will generate:
 python model.py
 ```
 This will:
-- Train all models (LR, RF, XGBoost, MLP) and save them to `./saved_models/`
+- Train all models (LR, RF, XGBoost, MLP) using 6 features (4 dietary ratios + Year + Province)
+- Save trained models to `./saved_models/`
 - Output model performance metrics to `./results/model_results.csv`
 - Generate SHAP plots in `./figures/` (`shap_summary.png`, `shap_by_year.png`, `shap_by_province.png`, `shap_province_ranking.png`)
 
@@ -162,5 +185,7 @@ model = joblib.load("./saved_models/XGBoost.pkl")
 predictions = model.predict(data.X_test)
 ```
 
+
 ## License
+
 This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
