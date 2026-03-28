@@ -1,0 +1,210 @@
+================================================================================
+Urban vs Rural Dietary Structure Analysis (CHNS 1991-2011)
+================================================================================
+Data Source: China Health and Nutrition Survey
+T1 = Province (n=12 regions)
+WAVE = Survey Year (Range: 1991-2011)
+Major Provinces (≥1000 samples): 12
+
+Mean Values by Group (Energy Ratio)
+       fat_energy_ratio  carbo_energy_ratio  protn_energy_ratio  fat_carbo_ratio
+Group                                                                           
+Rural             0.253              0.6218              0.1194           0.2079
+Urban             0.317              0.5442              0.1322           0.2984
+
+ANOVA Significance Test (Urban vs Rural Overall)
+fat_energy_ratio     F= 6976.89    p=0.00e+00 ***
+carbo_energy_ratio   F= 9434.07    p=0.00e+00 ***
+protn_energy_ratio   F= 4969.10    p=0.00e+00 ***
+fat_carbo_ratio      F= 6277.49    p=0.00e+00 ***
+
+================================================================================
+Provincial Analysis (Urban × Rural)
+================================================================================
+
+Mean by Province and Group:
+                    fat_energy_ratio  carbo_energy_ratio  protn_energy_ratio  fat_carbo_ratio
+Province     Group                                                                           
+Beijing      Rural            0.3196              0.5240              0.1427           0.3029
+             Urban            0.3478              0.4874              0.1604           0.3490
+Chongqing    Rural            0.3521              0.5178              0.1267           0.3742
+             Urban            0.3877              0.4501              0.1541           0.4672
+Guangxi      Rural            0.2702              0.6061              0.1175           0.2159
+             Urban            0.3263              0.5436              0.1279           0.3016
+Guizhou      Rural            0.2287              0.6495              0.1140           0.1781
+             Urban            0.2718              0.5987              0.1216           0.2337
+Heilongjiang Rural            0.2695              0.6165              0.1110           0.2148
+             Urban            0.3204              0.5475              0.1230           0.3003
+Henan        Rural            0.1887              0.6884              0.1208           0.1372
+             Urban            0.2584              0.6126              0.1259           0.2132
+Hubei        Rural            0.2375              0.6473              0.1117           0.1866
+             Urban            0.3096              0.5569              0.1247           0.2800
+Hunan        Rural            0.2937              0.5826              0.1194           0.2584
+             Urban            0.3358              0.5268              0.1330           0.3203
+Jiangsu      Rural            0.2680              0.5997              0.1250           0.2264
+             Urban            0.3571              0.4930              0.1413           0.3756
+Liaoning     Rural            0.2565              0.6123              0.1210           0.2146
+             Urban            0.3163              0.5410              0.1361           0.2876
+Shandong     Rural            0.2538              0.6113              0.1280           0.2129
+             Urban            0.3258              0.5266              0.1367           0.3023
+Shanghai     Rural            0.3998              0.4353              0.1587           0.4765
+             Urban            0.3833              0.4432              0.1701           0.4237
+
+Overall Mean by Province:
+              fat_energy_ratio  carbo_energy_ratio  protn_energy_ratio  fat_carbo_ratio
+Province                                                                               
+Beijing                 0.3371              0.5012              0.1537           0.3315
+Chongqing               0.3704              0.4830              0.1408           0.4220
+Guangxi                 0.2876              0.5867              0.1207           0.2425
+Guizhou                 0.2425              0.6332              0.1164           0.1960
+Heilongjiang            0.2873              0.5924              0.1152           0.2447
+Henan                   0.2106              0.6646              0.1224           0.1611
+Hubei                   0.2612              0.6177              0.1160           0.2173
+Hunan                   0.3077              0.5640              0.1239           0.2790
+Jiangsu                 0.2988              0.5629              0.1306           0.2779
+Liaoning                0.2763              0.5887              0.1260           0.2387
+Shandong                0.2742              0.5873              0.1305           0.2382
+Shanghai                0.3893              0.4403              0.1660           0.4427
+
+Provincial ANOVA (p<0.05 significant results only)
+
+fat_energy_ratio (Significant: 12/12):
+  Jiangsu     (Code32): F=1580.50  p=0.00e+00 ***  (Urban n=3815, Rural n=7244)
+  Henan       (Code41): F=1143.30  p=1.86e-239 ***  (Urban n=3765, Rural n=8218)
+  Hubei       (Code42): F= 980.48  p=2.11e-206 ***  (Urban n=3673, Rural n=7529)
+  Guangxi     (Code45): F= 915.22  p=1.58e-194 ***  (Urban n=4153, Rural n=9231)
+  Shandong    (Code37): F= 895.37  p=6.12e-189 ***  (Urban n=3004, Rural n=7606)
+  Liaoning    (Code21): F= 581.37  p=1.84e-124 ***  (Urban n=2928, Rural n=5925)
+  Guizhou     (Code52): F= 374.37  p=3.50e-82 ***  (Urban n=3937, Rural n=8320)
+  Heilongjiang(Code23): F= 355.74  p=1.51e-77 ***  (Urban n=2598, Rural n=4837)
+  Hunan       (Code43): F= 336.60  p=4.33e-74 ***  (Urban n=3701, Rural n=7412)
+  Beijing     (Code11): F=  23.58  p=1.34e-06 ***  (Urban n=801, Rural n=488)
+  Chongqing   (Code55): F=  19.01  p=1.41e-05 ***  (Urban n=654, Rural n=619)
+  Shanghai    (Code31): F=   8.71  p=3.22e-03 **  (Urban n=938, Rural n=530)
+
+carbo_energy_ratio (Significant: 11/12):
+  Jiangsu     (Code32): F=1962.20  p=0.00e+00 ***  (Urban n=3815, Rural n=7244)
+  Hubei       (Code42): F=1479.01  p=4.85e-304 ***  (Urban n=3673, Rural n=7529)
+  Henan       (Code41): F=1377.97  p=1.33e-285 ***  (Urban n=3765, Rural n=8218)
+  Shandong    (Code37): F=1159.84  p=2.38e-241 ***  (Urban n=3004, Rural n=7606)
+  Guangxi     (Code45): F=1030.41  p=7.20e-218 ***  (Urban n=4153, Rural n=9231)
+  Liaoning    (Code21): F= 728.61  p=2.80e-154 ***  (Urban n=2928, Rural n=5925)
+  Heilongjiang(Code23): F= 640.94  p=1.03e-135 ***  (Urban n=2598, Rural n=4837)
+  Hunan       (Code43): F= 596.36  p=2.41e-128 ***  (Urban n=3701, Rural n=7412)
+  Guizhou     (Code52): F= 472.32  p=8.62e-103 ***  (Urban n=3937, Rural n=8320)
+  Chongqing   (Code55): F=  74.91  p=1.47e-17 ***  (Urban n=654, Rural n=619)
+  Beijing     (Code11): F=  43.65  p=5.73e-11 ***  (Urban n=801, Rural n=488)
+
+protn_energy_ratio (Significant: 12/12):
+  Jiangsu     (Code32): F= 860.01  p=4.07e-182 ***  (Urban n=3815, Rural n=7244)
+  Hubei       (Code42): F= 700.03  p=1.10e-149 ***  (Urban n=3673, Rural n=7529)
+  Hunan       (Code43): F= 629.98  p=2.83e-135 ***  (Urban n=3701, Rural n=7412)
+  Liaoning    (Code21): F= 533.78  p=1.01e-114 ***  (Urban n=2928, Rural n=5925)
+  Guangxi     (Code45): F= 470.98  p=1.15e-102 ***  (Urban n=4153, Rural n=9231)
+  Heilongjiang(Code23): F= 413.24  p=1.89e-89 ***  (Urban n=2598, Rural n=4837)
+  Shandong    (Code37): F= 285.06  p=3.94e-63 ***  (Urban n=3004, Rural n=7606)
+  Guizhou     (Code52): F= 238.92  p=2.16e-53 ***  (Urban n=3937, Rural n=8320)
+  Henan       (Code41): F= 141.63  p=1.79e-32 ***  (Urban n=3765, Rural n=8218)
+  Chongqing   (Code55): F= 145.21  p=9.62e-32 ***  (Urban n=654, Rural n=619)
+  Beijing     (Code11): F=  81.32  p=6.79e-19 ***  (Urban n=801, Rural n=488)
+  Shanghai    (Code31): F=  33.79  p=7.52e-09 ***  (Urban n=938, Rural n=530)
+
+fat_carbo_ratio (Significant: 12/12):
+  Jiangsu     (Code32): F=1597.91  p=0.00e+00 ***  (Urban n=3815, Rural n=7244)
+  Guangxi     (Code45): F=1093.53  p=1.40e-230 ***  (Urban n=4153, Rural n=9231)
+  Hubei       (Code42): F= 946.94  p=1.09e-199 ***  (Urban n=3673, Rural n=7529)
+  Henan       (Code41): F= 830.81  p=1.07e-176 ***  (Urban n=3765, Rural n=8218)
+  Shandong    (Code37): F= 643.48  p=7.14e-138 ***  (Urban n=3004, Rural n=7606)
+  Heilongjiang(Code23): F= 508.81  p=4.94e-109 ***  (Urban n=2598, Rural n=4837)
+  Liaoning    (Code21): F= 417.51  p=1.03e-90 ***  (Urban n=2928, Rural n=5925)
+  Guizhou     (Code52): F= 407.27  p=4.01e-89 ***  (Urban n=3937, Rural n=8320)
+  Hunan       (Code43): F= 222.23  p=8.93e-50 ***  (Urban n=3701, Rural n=7412)
+  Chongqing   (Code55): F=  27.94  p=1.47e-07 ***  (Urban n=654, Rural n=619)
+  Beijing     (Code11): F=  17.45  p=3.15e-05 ***  (Urban n=801, Rural n=488)
+  Shanghai    (Code31): F=  16.90  p=4.15e-05 ***  (Urban n=938, Rural n=530)
+
+================================================================================
+Temporal Trends by Survey Year
+================================================================================
+
+Overall Trend:
+      fat_energy_ratio  carbo_energy_ratio  protn_energy_ratio  fat_carbo_ratio
+Year                                                                           
+1991            0.2181              0.6594              0.1177           0.1663
+1993            0.2255              0.6490              0.1205           0.1755
+1997            0.2527              0.6223              0.1206           0.2120
+2000            0.2804              0.5938              0.1207           0.2409
+2004            0.2776              0.5925              0.1225           0.2365
+2006            0.2925              0.5763              0.1228           0.2574
+2009            0.3104              0.5573              0.1257           0.2780
+2011            0.3351              0.5209              0.1371           0.3309
+
+Trend by Group:
+            fat_energy_ratio  carbo_energy_ratio  protn_energy_ratio  fat_carbo_ratio
+Year Group                                                                           
+1991 Rural            0.2004              0.6792              0.1155           0.1484
+     Urban            0.2583              0.6144              0.1228           0.2068
+1993 Rural            0.2044              0.6734              0.1179           0.1509
+     Urban            0.2764              0.5903              0.1265           0.2348
+1997 Rural            0.2281              0.6510              0.1173           0.1791
+     Urban            0.3034              0.5633              0.1275           0.2795
+2000 Rural            0.2580              0.6205              0.1169           0.2098
+     Urban            0.3276              0.5377              0.1286           0.3062
+2004 Rural            0.2594              0.6152              0.1186           0.2096
+     Urban            0.3134              0.5479              0.1303           0.2893
+2006 Rural            0.2735              0.5994              0.1191           0.2289
+     Urban            0.3296              0.5312              0.1302           0.3131
+2009 Rural            0.2944              0.5781              0.1210           0.2503
+     Urban            0.3426              0.5154              0.1352           0.3339
+2011 Rural            0.3166              0.5463              0.1294           0.2965
+     Urban            0.3627              0.4830              0.1488           0.3824
+
+Yearly ANOVA (Urban vs Rural by Year)
+
+Year 1991 (n=13446):
+  fat_energy_ratio     F=  883.92  p=3.53e-188 ***
+  carbo_energy_ratio   F= 1020.31  p=7.26e-216 ***
+  protn_energy_ratio   F=  332.64  p=1.96e-73 ***
+  fat_carbo_ratio      F=  701.19  p=1.16e-150 ***
+
+Year 1993 (n=12632):
+  fat_energy_ratio     F= 1315.80  p=3.68e-274 ***
+  carbo_energy_ratio   F= 1561.35  p=0.00e+00 ***
+  protn_energy_ratio   F=  385.37  p=1.53e-84 ***
+  fat_carbo_ratio      F= 1125.69  p=1.74e-236 ***
+
+Year 1997 (n=12743):
+  fat_energy_ratio     F= 1242.48  p=8.56e-260 ***
+  carbo_energy_ratio   F= 1607.57  p=0.00e+00 ***
+  protn_energy_ratio   F=  473.88  p=3.44e-103 ***
+  fat_carbo_ratio      F=  848.36  p=1.28e-180 ***
+
+Year 2000 (n=13530):
+  fat_energy_ratio     F= 1178.85  p=8.81e-248 ***
+  carbo_energy_ratio   F= 1565.05  p=0.00e+00 ***
+  protn_energy_ratio   F=  583.60  p=2.86e-126 ***
+  fat_carbo_ratio      F= 1025.76  p=5.15e-217 ***
+
+Year 2004 (n=11783):
+  fat_energy_ratio     F=  638.98  p=2.45e-137 ***
+  carbo_energy_ratio   F=  926.95  p=4.74e-196 ***
+  protn_energy_ratio   F=  501.09  p=1.00e-108 ***
+  fat_carbo_ratio      F=  745.13  p=3.86e-159 ***
+
+Year 2006 (n=11328):
+  fat_energy_ratio     F=  630.01  p=2.39e-135 ***
+  carbo_energy_ratio   F=  874.13  p=3.98e-185 ***
+  protn_energy_ratio   F=  444.15  p=9.62e-97 ***
+  fat_carbo_ratio      F=  674.04  p=2.10e-144 ***
+
+Year 2009 (n=11566):
+  fat_energy_ratio     F=  540.89  p=5.70e-117 ***
+  carbo_energy_ratio   F=  892.30  p=6.23e-189 ***
+  protn_energy_ratio   F=  659.71  p=1.54e-141 ***
+  fat_carbo_ratio      F=  647.33  p=5.42e-139 ***
+
+Year 2011 (n=14898):
+  fat_energy_ratio     F=  567.63  p=3.66e-123 ***
+  carbo_energy_ratio   F= 1063.56  p=2.12e-225 ***
+  protn_energy_ratio   F= 1183.49  p=1.23e-249 ***
+  fat_carbo_ratio      F=  569.24  p=1.68e-123 ***
