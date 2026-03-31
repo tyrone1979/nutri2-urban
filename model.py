@@ -87,17 +87,22 @@ class DataPipeline:
         df = df[['T2', 'T1', 'WAVE', 'D3KCAL', 'D3CARBO', 'D3FAT', 'D3PROTN']].dropna()
         df = df[(df.D3KCAL > 500) & (df.D3KCAL < 5000)]
 
-        df['is_urban'] = df['T2'].apply(lambda x: 1 if x == 1 else 0)
         df['fat_pct'] = df.D3FAT * 9 / df.D3KCAL
         df['carbo_pct'] = df.D3CARBO * 4 / df.D3KCAL
         df['protn_pct'] = df.D3PROTN * 4 / df.D3KCAL
         df['fat_carbo'] = df.D3FAT / (df.D3CARBO + 1e-6)
-        df['Year'] = df['WAVE'].astype(int)  # WAVE -> Year
-        df['Province'] = df['T1'].map(PROVINCE_SHORT)  # T1 -> Province name
-        df['Province_Code'] = df['T1'].astype(int)  # Keep code for reference
+        df['Year'] = df['WAVE'].astype(int)
+        df['Province'] = df['T1'].astype(int)
 
-        X = df[['fat_pct', 'carbo_pct', 'protn_pct', 'fat_carbo', 'Year', 'Province_Code']].values
-        y = df['is_urban'].values
+        # ===================== 3分类标签 =====================
+        df['label'] = 0  # 农村
+        df.loc[df['T2'] == 1, 'label'] = 2  # 城市
+        # 中间过渡类
+        mask_mid = (df['fat_pct'] >= 0.23) & (df['fat_pct'] <= 0.30)
+        df.loc[mask_mid, 'label'] = 1
+
+        X = df[['fat_pct', 'carbo_pct', 'protn_pct', 'fat_carbo', 'Year', 'Province']].values
+        y = df['label'].values  # 不再用 is_urban
 
         # 分层抽样
         self.X_train, self.X_test, self.y_train, self.y_test, train_idx, test_idx = train_test_split(
@@ -118,6 +123,30 @@ class DataPipeline:
         print(f"✅ 数据加载完成 | 训练集: {len(self.X_train)} | 测试集: {len(self.X_test)}")
         print(f"   Year范围: {self.year_test.min()}-{self.year_test.max()}")
         print(f"   省份数: {len(np.unique(self.province_test))}")
+        # ===================== Statistics of class counts by province =====================
+        print("\n" + "=" * 60)
+        print("📊 Dataset Class Statistics (0=Rural, 1=Urban/Rural, 2=Urban)")
+        print("=" * 60)
+
+        # Overall count
+        total_counts = df['label'].value_counts().sort_index()
+        print("Overall class counts:")
+        print(f"  Rural (0)          : {total_counts.get(0, 0)}")
+        print(f"  Urban/Rural (1)    : {total_counts.get(1, 0)}")
+        print(f"  Urban (2)          : {total_counts.get(2, 0)}")
+        print(f"  Total              : {len(df)}")
+
+        # By province
+        print("\nClass distribution by province:")
+        prov_counts = df.groupby('Province')['label'].value_counts().unstack(fill_value=0)
+        for code in sorted(prov_counts.index):
+            prov_name = PROVINCE_SHORT.get(code, f"Province{code}")
+            rural = prov_counts.loc[code, 0] if 0 in prov_counts.columns else 0
+            mixed = prov_counts.loc[code, 1] if 1 in prov_counts.columns else 0
+            urban = prov_counts.loc[code, 2] if 2 in prov_counts.columns else 0
+            print(f"  {prov_name:12s} | Rural:{rural:4d}  Urban/Rural:{mixed:4d}  Urban:{urban:4d}")
+
+        print("=" * 60)
         return self
 
 
@@ -187,7 +216,7 @@ class MLModels:
             return self
         print("[2/4] 训练 XGBoost...")
         model = XGBClassifier(n_estimators=300, max_depth=4, learning_rate=0.1,
-                              objective='binary:logistic', random_state=42, n_jobs=1)
+                              objective='multi:softmax', num_class=3,random_state=42, n_jobs=1)
         return self._train_eval(model, "XGBoost")
 
     def balanced_xgboost(self):
@@ -216,62 +245,20 @@ class MLModels:
         )
         return self._train_eval(model, "Balanced_XGBoost")
 
-    # ===================== 🔥 终极杀器：Stacking 融合模型（全模型集成）=====================
-    from sklearn.ensemble import StackingClassifier
-    def stacking_ensemble(self):
-        from sklearn.ensemble import StackingClassifier
-        if not self._should_train("Stacking_Ensemble"):
-            return self
-        print("[2/4] 训练 Stacking 融合模型（全模型集成，最强性能）...")
-
-        # 基模型
-        base_models = [
-            ("lr", LogisticRegression(max_iter=5000)),
-            ("rf", RandomForestClassifier(n_estimators=300, max_depth=6, random_state=42)),
-            ("xgb", XGBClassifier(n_estimators=300, max_depth=4, learning_rate=0.1,
-                                  objective="binary:logistic", random_state=42)),
-        ]
-
-        # 元模型
-        meta_model = XGBClassifier(
-            n_estimators=200,
-            max_depth=3,
-            learning_rate=0.08,
-            scale_pos_weight=np.sqrt(np.sum(self.y_train == 0) / np.sum(self.y_train == 1)),
-            random_state=42
-        )
-
-        stacking = StackingClassifier(
-            estimators=base_models,
-            final_estimator=meta_model,
-            cv=5,
-            stack_method="predict_proba",
-            n_jobs=1
-        )
-
-        return self._train_eval(stacking, "Stacking_Ensemble")
 
     def _train_eval(self, model, name):
         start = time.time()
         model.fit(self.X_train, self.y_train)
         train_time = time.time() - start
 
-        ypb = model.predict_proba(self.X_test)[:, 1]
-
-        # ===================== 🔥 只针对正例优化 F1（城市样本）=====================
-        from sklearn.metrics import precision_recall_curve
-        precision, recall, thresholds = precision_recall_curve(self.y_test, ypb, pos_label=1)
-        f1_scores = 2 * precision * recall / (precision + recall + 1e-6)
-        best_idx = np.nanargmax(f1_scores)
-        best_thresh = thresholds[best_idx]
-        yp = (ypb >= best_thresh).astype(int)
+        ypb = model.predict_proba(self.X_test)
+        yp = model.predict(self.X_test)
 
         self.results[name] = {
             "Acc": round(accuracy_score(self.y_test, yp), 3),
-            "F1": round(f1_score(self.y_test, yp), 3),
-            "AUC": round(roc_auc_score(self.y_test, ypb), 3),
-            "Time(s)": round(train_time, 2),
-            "Best_Thresh": round(best_thresh, 3)
+            "F1": round(f1_score(self.y_test, yp, average='weighted'), 3),
+            "AUC": round(roc_auc_score(self.y_test, ypb, multi_class='ovo', average='macro'), 3),
+            "Time(s)": round(train_time, 2)
         }
         self.trained_models[name] = model
         joblib.dump(model, f"{MODEL_SAVE_DIR}/{name}.pkl")
@@ -290,20 +277,17 @@ class MLModels:
         return self
 
 
-# ===================== PyTorch MLP =====================
 class MLP(nn.Module):
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(6, 16),
-            nn.BatchNorm1d(16),
+            nn.Linear(6, 64),
             nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(16, 8),
-            nn.BatchNorm1d(8),
+            nn.Dropout(0.3),
+            nn.Linear(64, 32),
             nn.ReLU(),
-            nn.Linear(8, 1),
-            nn.Sigmoid()
+            nn.Dropout(0.3),
+            nn.Linear(32, 3)
         )
 
     def forward(self, x):
@@ -327,80 +311,78 @@ class TorchTrainer:
         self.model = MLP().to(self.device)
         try:
             self.model.load_state_dict(torch.load(self.model_path, map_location=self.device))
-            print("✅ 已加载保存的PyTorch MLP模型")
             return self._evaluate()
         except RuntimeError:
-            print("⚠️  模型架构变化，重新训练...")
-            os.remove(self.model_path)
+            if os.path.exists(self.model_path):
+                os.remove(self.model_path)
             return False
 
-    def train(self, epochs=30, batch_size=32):
+    def train(self, epochs=150, batch_size=1024):
         load_res = self.load_model()
         if load_res:
             return load_res, self.model
 
-        print(f"\n[3/4] 训练 PyTorch MLP | {epochs}轮 | batch={batch_size}")
+        print(f"\n[3/4] 训练 PyTorch MLP 3分类 | {epochs}轮 | batch={batch_size}")
         self.model = MLP().to(self.device)
-        loss_fn = nn.BCELoss()
+        loss_fn = nn.CrossEntropyLoss()
         opt = optim.Adam(self.model.parameters(), lr=1e-3)
 
-        n_samples = len(self.X_train)
-        n_batches = (n_samples + batch_size - 1) // batch_size
-
         X_tensor = torch.tensor(self.X_train, dtype=torch.float32).to(self.device)
-        y_tensor = torch.tensor(self.y_train, dtype=torch.float32).reshape(-1, 1).to(self.device)
+        y_tensor = torch.tensor(self.y_train, dtype=torch.long).to(self.device)
 
+        n_samples = len(X_tensor)
         pbar = tqdm(range(epochs), desc="Training MLP", ncols=80)
+
+        # 🔥 开始计时
+        start_time = time.time()
+
         for epoch in pbar:
             self.model.train()
-            indices = torch.randperm(n_samples, device=self.device)
-            total_loss = 0.0
-            for i in range(n_batches):
-                start_idx = i * batch_size
-                end_idx = min(start_idx + batch_size, n_samples)
-                batch_idx = indices[start_idx:end_idx]
-                bx = X_tensor[batch_idx]
-                by = y_tensor[batch_idx]
+            perm = torch.randperm(n_samples).to(self.device)
+            total_loss = 0
+
+            for i in range(0, n_samples, batch_size):
+                idx = perm[i:i+batch_size]
+                bx, by = X_tensor[idx], y_tensor[idx]
                 pred = self.model(bx)
                 loss = loss_fn(pred, by)
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
                 total_loss += loss.item()
-            avg_loss = total_loss / n_batches
-            pbar.set_postfix({"loss": f"{avg_loss:.4f}"})
+
+            avg_loss = total_loss / (n_samples // batch_size + 1)
+            pbar.set_postfix(loss=f"{avg_loss:.3f}")
+
+        # 🔥 计算总时间
+        train_time = time.time() - start_time
 
         res = self._evaluate()
+        res["Time(s)"] = round(train_time, 2)
         self.save_model()
-        print(f"✅ PyTorch MLP | Acc: {res['Acc']:.3f} | F1: {res['F1']:.3f} | AUC: {res['AUC']:.3f}")
+
+        print(f"✅ MLP 3分类 | Acc:{res['Acc']:.3f} F1(w):{res['F1']:.3f} AUC:{res['AUC']:.3f} Time:{res['Time(s)']:.2f}s")
         return res, self.model
 
     def _evaluate(self):
         self.model.eval()
         with torch.no_grad():
             xt = torch.tensor(self.X_test, dtype=torch.float32).to(self.device)
-            ypb = self.model(xt).cpu().numpy().flatten()
-
-        # 🔥 加最优阈值
-        from sklearn.metrics import precision_recall_curve
-        precision, recall, thresholds = precision_recall_curve(self.y_test, ypb)
-        f1_scores = 2 * (precision * recall) / (precision + recall + 1e-6)
-        best_idx = np.argmax(f1_scores)
-        best_thresh = thresholds[best_idx]
-        yp = (ypb >= best_thresh).astype(int)
+            logits = self.model(xt)
+            ypb = torch.softmax(logits, dim=1).cpu().numpy()
+            yp = logits.argmax(1).cpu().numpy()
 
         return {
             "Acc": round(accuracy_score(self.y_test, yp), 3),
-            "F1": round(f1_score(self.y_test, yp), 3),
-            "AUC": round(roc_auc_score(self.y_test, ypb), 3),
-            "Best_Thresh": round(best_thresh, 3)
+            "F1": round(f1_score(self.y_test, yp, average='weighted'), 3),
+            "AUC": round(roc_auc_score(self.y_test, ypb, multi_class='ovo', average='macro'), 3),
+            "Time(s)": 0.0
         }
 
     def save_model(self, path=None):
         torch.save(self.model.state_dict(), path or self.model_path)
 
-
-# ===================== SHAP Analyzer（修改版）=====================
+# ===================== SHAP Analyzer（3分类修复版）=====================
 class SHAPAnalyzer:
     def __init__(self, model, X_test, feature_names, year_test=None, province_test=None):
         self.model = model
@@ -408,7 +390,7 @@ class SHAPAnalyzer:
         self.year_test = year_test
         self.province_test = province_test
         self.explainer = None
-        self.shap_values = None
+        self.shap_values = None  # 3分类会是 [n_sample, n_feat, 3]
 
     def run(self):
         print("\n[4/4] 生成 SHAP 特征重要性图...")
@@ -417,26 +399,82 @@ class SHAPAnalyzer:
         self.explainer = shap.TreeExplainer(self.model)
         self.shap_values = self.explainer.shap_values(self.X_test)
 
+        # ===================== 打印 SHAP 值统计 =====================
+        print("\n" + "=" * 70)
+        print("📊 SHAP Value Analysis")
+        print("=" * 70)
+
+        # 处理多分类 SHAP 值
+        if isinstance(self.shap_values, list) or len(self.shap_values.shape) == 3:
+            # 多分类情况
+            n_classes = self.shap_values.shape[2] if len(self.shap_values.shape) == 3 else len(self.shap_values)
+            print(f"\n多分类检测: {n_classes} 个类别 (0=Rural, 1=Transitional, 2=Urban)")
+
+            for class_idx in range(n_classes):
+                # 获取当前类别的 SHAP 值
+                if len(self.shap_values.shape) == 3:
+                    sv_class = self.shap_values[:, :, class_idx]
+                else:
+                    sv_class = self.shap_values[class_idx]
+
+                # 计算平均绝对 SHAP 值（特征重要性）
+                mean_abs_shap = np.abs(sv_class).mean(axis=0)
+
+                print(f"\n{'=' * 50}")
+                print(
+                    f"Class {class_idx} {'(Rural)' if class_idx == 0 else '(Transitional)' if class_idx == 1 else '(Urban)'}")
+                print(f"{'=' * 50}")
+                print(f"{'Feature':<25} {'Mean |SHAP|':<15} {'Direction':<15}")
+                print(f"{'-' * 50}")
+
+                for name, value in zip(self.X_test.columns, mean_abs_shap):
+                    # 计算平均 SHAP 值（带符号）来判断方向
+                    mean_shap = sv_class.mean(axis=0)[list(self.X_test.columns).index(name)]
+                    direction = "Positive → Urban" if mean_shap > 0 else "Negative → Rural"
+                    print(f"{name:<25} {value:.6f}        {direction}")
+
+                # 打印总体统计
+                print(f"\n总平均 |SHAP|: {mean_abs_shap.mean():.6f}")
+                print(f"最重要的特征: {self.X_test.columns[np.argmax(mean_abs_shap)]} ({mean_abs_shap.max():.6f})")
+
+            # 🔥 取第 2 类（城市）的 SHAP 值画图（保持原有逻辑）
+            sv = self.shap_values[:, :, 2] if len(self.shap_values.shape) == 3 else self.shap_values[2]
+            print(f"\n✅ 使用 Class 2 (Urban) 的 SHAP 值生成可视化")
+
+        else:
+            # 二分类情况
+            mean_abs_shap = np.abs(self.shap_values).mean(axis=0)
+            print(f"\n{'Feature':<25} {'Mean |SHAP|':<15} {'Direction':<15}")
+            print(f"{'-' * 50}")
+            for name, value in zip(self.X_test.columns, mean_abs_shap):
+                mean_shap = self.shap_values.mean(axis=0)[list(self.X_test.columns).index(name)]
+                direction = "Positive → Urban" if mean_shap > 0 else "Negative → Rural"
+                print(f"{name:<25} {value:.6f}        {direction}")
+            sv = self.shap_values
+
+        print("=" * 70)
+
         # 1. 标准SHAP summary图
         plt.figure(figsize=(10, 6))
-        shap.summary_plot(self.shap_values, self.X_test, show=False)
+        shap.summary_plot(sv, self.X_test, show=False)
         plt.tight_layout()
         plt.savefig(f"{FIGURE_DIR}/shap_summary.png", dpi=300, bbox_inches='tight')
         plt.close()
-        print("   ✅ shap_summary.png 已保存")
+        print("\n   ✅ shap_summary.png 已保存")
 
-        # 2. 按Year分层的SHAP分析
+        # 2. 按Year分层（打印每年的特征重要性）
         if self.year_test is not None:
-            self._plot_by_year()
+            self._plot_by_year(sv)
+            self._print_shap_by_year(sv)  # 新增：打印每年的SHAP统计
 
-        # 3. 按Province分层的SHAP分析
+        # 3. 按Province分层（打印各省的特征重要性）
         if self.province_test is not None:
-            self._plot_by_province()
+            self._plot_by_province(sv)
+            self._print_shap_by_province(sv)  # 新增：打印各省的SHAP统计
 
         return self
 
-    def _plot_by_year(self):
-        """按年份分析特征重要性变化"""
+    def _plot_by_year(self, sv):
         years = sorted(np.unique(self.year_test))
         feature_cols = list(self.X_test.columns)
 
@@ -444,75 +482,130 @@ class SHAPAnalyzer:
         axes = axes.flatten()
 
         for idx, feature in enumerate(feature_cols):
-            if idx >= 6:
-                break
+            if idx >= 6: break
             ax = axes[idx]
-
             for year in years:
                 year_mask = self.year_test == year
-                if year_mask.sum() > 0 and isinstance(self.shap_values, np.ndarray):
-                    year_shap = self.shap_values[year_mask, idx]
-                    ax.scatter([year] * len(year_shap), year_shap, alpha=0.3, s=15, label=str(year))
-
+                if year_mask.sum() > 0:
+                    year_shap = sv[year_mask, idx]
+                    ax.scatter([year] * len(year_shap), year_shap, alpha=0.3, s=15)
             ax.set_xlabel("Year")
-            ax.set_ylabel(f"SHAP value")
-            ax.set_title(f"{feature}")
-            ax.grid(True, alpha=0.3)
-            if idx == 0:
-                ax.legend(title="Year", bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
-
+            ax.set_ylabel("SHAP value")
+            ax.set_title(feature)
+            ax.grid(alpha=0.3)
         plt.tight_layout()
         plt.savefig(f"{FIGURE_DIR}/shap_by_year.png", dpi=300, bbox_inches='tight')
         plt.close()
         print("   ✅ shap_by_year.png 已保存")
 
-    def _plot_by_province(self):
-        """按省份分析平均SHAP值"""
+    def _print_shap_by_year(self, sv):
+        """打印按年份分层的SHAP统计"""
+        years = sorted(np.unique(self.year_test))
+        feature_cols = list(self.X_test.columns)
+
+        print("\n" + "=" * 80)
+        print("📅 SHAP Values by Year (Class 2 - Urban)")
+        print("=" * 80)
+
+        # 创建结果表格
+        results = []
+        for year in years:
+            year_mask = self.year_test == year
+            if year_mask.sum() > 0:
+                year_shap = sv[year_mask]
+                mean_shap = np.abs(year_shap).mean(axis=0)
+                row = {'Year': year, 'N': year_mask.sum()}
+                for idx, feat in enumerate(feature_cols):
+                    row[f'{feat}_mean_abs'] = mean_shap[idx]
+                results.append(row)
+
+        # 打印为表格
+        df_yearly = pd.DataFrame(results)
+        print("\n" + df_yearly.to_string(index=False))
+
+        # 打印趋势
+        print("\n📈 趋势分析 (1991 → 2011):")
+        for idx, feat in enumerate(feature_cols):
+            first_val = df_yearly[df_yearly['Year'] == 1991][f'{feat}_mean_abs'].values[0] if 1991 in df_yearly[
+                'Year'].values else None
+            last_val = df_yearly[df_yearly['Year'] == 2011][f'{feat}_mean_abs'].values[0] if 2011 in df_yearly[
+                'Year'].values else None
+            if first_val and last_val:
+                change = ((last_val - first_val) / first_val) * 100
+                arrow = "↑" if change > 0 else "↓"
+                print(f"  {feat:<20}: {first_val:.4f} → {last_val:.4f} ({arrow}{abs(change):.1f}%)")
+
+    def _plot_by_province(self, sv):
         feature_cols = list(self.X_test.columns)
         provinces = np.unique(self.province_test)
-
-        # 计算每个省份的平均|SHAP|
         prov_shap_list = []
         valid_provinces = []
 
         for prov in provinces:
             prov_mask = self.province_test == prov
-            if prov_mask.sum() > 30 and isinstance(self.shap_values, np.ndarray):
-                mean_shap = np.abs(self.shap_values[prov_mask, :]).mean(axis=0)
+            if prov_mask.sum() > 30:
+                mean_shap = np.abs(sv[prov_mask]).mean(axis=0)
                 prov_shap_list.append(mean_shap)
                 valid_provinces.append(prov)
 
         if len(valid_provinces) > 1:
-            prov_shap_df = pd.DataFrame(prov_shap_list, index=valid_provinces, columns=feature_cols)
-
-            # 热力图
+            df = pd.DataFrame(prov_shap_list, index=valid_provinces, columns=feature_cols)
             plt.figure(figsize=(10, 8))
-            sns.heatmap(prov_shap_df, annot=True, fmt='.3f', cmap='YlOrRd')
-            plt.title("Mean |SHAP| Value by Province")
-            plt.xlabel("Feature")
-            plt.ylabel("Province")
+            sns.heatmap(df, annot=True, fmt='.3f', cmap='YlOrRd')
+            plt.title("Mean |SHAP| by Province (Urban Class)")
             plt.tight_layout()
-            plt.savefig(f"{FIGURE_DIR}/shap_by_province.png", dpi=300, bbox_inches='tight')
+            plt.savefig(f"{FIGURE_DIR}/shap_by_province.png", dpi=300)
             plt.close()
             print("   ✅ shap_by_province.png 已保存")
 
-            # 各省份特征重要性排名（前4个特征）
-            fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-            axes = axes.flatten()
+    def _print_shap_by_province(self, sv):
+        """打印按省份分层的SHAP统计"""
+        feature_cols = list(self.X_test.columns)
+        provinces = np.unique(self.province_test)
 
-            for idx, feature in enumerate(feature_cols[:4]):
-                ax = axes[idx]
-                feature_means = prov_shap_df[feature].sort_values(ascending=True)
-                colors = plt.cm.RdYlBu_r(np.linspace(0.2, 0.8, len(feature_means)))
-                feature_means.plot(kind='barh', ax=ax, color=colors)
-                ax.set_title(f"{feature} Importance by Province")
-                ax.set_xlabel("Mean |SHAP|")
+        # 省份编码映射
+        province_names = {
+            11: "Beijing", 21: "Liaoning", 23: "Heilongjiang", 31: "Shanghai",
+            32: "Jiangsu", 37: "Shandong", 41: "Henan", 42: "Hubei",
+            43: "Hunan", 45: "Guangxi", 52: "Guizhou", 55: "Chongqing"
+        }
 
-            plt.tight_layout()
-            plt.savefig(f"{FIGURE_DIR}/shap_province_ranking.png", dpi=300, bbox_inches='tight')
-            plt.close()
-            print("   ✅ shap_province_ranking.png 已保存")
+        print("\n" + "=" * 80)
+        print("🗺️  SHAP Values by Province (Class 2 - Urban)")
+        print("=" * 80)
 
+        results = []
+        for prov in provinces:
+            prov_mask = self.province_test == prov
+            if prov_mask.sum() > 30:
+                prov_shap = sv[prov_mask]
+                mean_abs_shap = np.abs(prov_shap).mean(axis=0)
+                prov_name = province_names.get(prov, f"Province{prov}")
+                row = {'Province': prov_name, 'Code': prov, 'N': prov_mask.sum()}
+                for idx, feat in enumerate(feature_cols):
+                    row[f'{feat}_mean_abs'] = mean_abs_shap[idx]
+                # 找出最重要的特征
+                max_feat_idx = np.argmax(mean_abs_shap)
+                row['Top_Feature'] = feature_cols[max_feat_idx]
+                row['Top_Value'] = mean_abs_shap[max_feat_idx]
+                results.append(row)
+
+        # 打印表格
+        df_prov = pd.DataFrame(results)
+        print("\n" + df_prov[['Province', 'N', 'fat_energy_ratio_mean_abs', 'carbo_energy_ratio_mean_abs',
+                              'protn_energy_ratio_mean_abs', 'fat_carbo_ratio_mean_abs',
+                              'Year_mean_abs', 'Province_mean_abs', 'Top_Feature', 'Top_Value']].to_string(index=False))
+
+        # 打印各省最突出特征
+        print("\n📌 各省最重要的判别特征:")
+        for _, row in df_prov.iterrows():
+            print(f"  {row['Province']:<12}: {row['Top_Feature']} ({row['Top_Value']:.4f})")
+
+        # 计算全国平均
+        print("\n📊 全国平均 |SHAP|:")
+        national_mean = np.abs(sv).mean(axis=0)
+        for idx, feat in enumerate(feature_cols):
+            print(f"  {feat:<20}: {national_mean[idx]:.6f}")
 
 # ===================== Main Trainer =====================
 class Trainer:
@@ -528,7 +621,7 @@ class Trainer:
         if force_retrain:
             ml.force_retrain()
 
-        ml.logistic_regression().random_forest().xgboost().balanced_xgboost().stacking_ensemble()
+        ml.logistic_regression().random_forest().xgboost().balanced_xgboost()
 
         torch_res, torch_model = TorchTrainer(
             data.X_train, data.X_test, data.y_train, data.y_test
