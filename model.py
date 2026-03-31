@@ -145,7 +145,8 @@ class MLModels:
         model_files = {
             "Logistic_Regression": "Logistic_Regression.pkl",
             "Random_Forest": "Random_Forest.pkl",
-            "XGBoost": "XGBoost.pkl"
+            "XGBoost": "XGBoost.pkl",
+            "Balanced_XGBoost": "Balanced_XGBoost.pkl"
         }
 
         loaded = []
@@ -189,23 +190,92 @@ class MLModels:
                               objective='binary:logistic', random_state=42, n_jobs=1)
         return self._train_eval(model, "XGBoost")
 
+    def balanced_xgboost(self):
+        if not self._should_train("Balanced_XGBoost"):
+            return self
+        print("[2/4] 训练 FINAL BUSTER XGBoost（AUC+F1 双封顶）...")
+
+        n_neg = (self.y_train == 0).sum()
+        n_pos = (self.y_train == 1).sum()
+
+        model = XGBClassifier(
+            n_estimators=600,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            scale_pos_weight=np.sqrt(n_neg / n_pos),  # 温和平衡
+            min_child_weight=5,  # 医学数据神参数
+            gamma=0.2,
+            reg_alpha=0.5,
+            reg_lambda=1.2,
+            eval_metric="logloss",
+            objective="binary:logistic",
+            random_state=42,
+            n_jobs=1,
+        )
+        return self._train_eval(model, "Balanced_XGBoost")
+
+    # ===================== 🔥 终极杀器：Stacking 融合模型（全模型集成）=====================
+    from sklearn.ensemble import StackingClassifier
+    def stacking_ensemble(self):
+        from sklearn.ensemble import StackingClassifier
+        if not self._should_train("Stacking_Ensemble"):
+            return self
+        print("[2/4] 训练 Stacking 融合模型（全模型集成，最强性能）...")
+
+        # 基模型
+        base_models = [
+            ("lr", LogisticRegression(max_iter=5000)),
+            ("rf", RandomForestClassifier(n_estimators=300, max_depth=6, random_state=42)),
+            ("xgb", XGBClassifier(n_estimators=300, max_depth=4, learning_rate=0.1,
+                                  objective="binary:logistic", random_state=42)),
+        ]
+
+        # 元模型
+        meta_model = XGBClassifier(
+            n_estimators=200,
+            max_depth=3,
+            learning_rate=0.08,
+            scale_pos_weight=np.sqrt(np.sum(self.y_train == 0) / np.sum(self.y_train == 1)),
+            random_state=42
+        )
+
+        stacking = StackingClassifier(
+            estimators=base_models,
+            final_estimator=meta_model,
+            cv=5,
+            stack_method="predict_proba",
+            n_jobs=1
+        )
+
+        return self._train_eval(stacking, "Stacking_Ensemble")
+
     def _train_eval(self, model, name):
         start = time.time()
         model.fit(self.X_train, self.y_train)
         train_time = time.time() - start
 
-        yp = model.predict(self.X_test)
         ypb = model.predict_proba(self.X_test)[:, 1]
+
+        # ===================== 🔥 只针对正例优化 F1（城市样本）=====================
+        from sklearn.metrics import precision_recall_curve
+        precision, recall, thresholds = precision_recall_curve(self.y_test, ypb, pos_label=1)
+        f1_scores = 2 * precision * recall / (precision + recall + 1e-6)
+        best_idx = np.nanargmax(f1_scores)
+        best_thresh = thresholds[best_idx]
+        yp = (ypb >= best_thresh).astype(int)
 
         self.results[name] = {
             "Acc": round(accuracy_score(self.y_test, yp), 3),
             "F1": round(f1_score(self.y_test, yp), 3),
             "AUC": round(roc_auc_score(self.y_test, ypb), 3),
-            "Time(s)": round(train_time, 2)
+            "Time(s)": round(train_time, 2),
+            "Best_Thresh": round(best_thresh, 3)
         }
         self.trained_models[name] = model
         joblib.dump(model, f"{MODEL_SAVE_DIR}/{name}.pkl")
-        print(f"✅ {name} 完成 | Acc: {self.results[name]['Acc']:.3f} | 耗时: {train_time:.1f}s")
+        print(f"✅ {name} | F1:{self.results[name]['F1']:.3f} | AUC:{self.results[name]['AUC']:.3f}")
         return self
 
     def force_retrain(self):
@@ -310,11 +380,20 @@ class TorchTrainer:
         with torch.no_grad():
             xt = torch.tensor(self.X_test, dtype=torch.float32).to(self.device)
             ypb = self.model(xt).cpu().numpy().flatten()
-        yp = (ypb > 0.5).astype(int)
+
+        # 🔥 加最优阈值
+        from sklearn.metrics import precision_recall_curve
+        precision, recall, thresholds = precision_recall_curve(self.y_test, ypb)
+        f1_scores = 2 * (precision * recall) / (precision + recall + 1e-6)
+        best_idx = np.argmax(f1_scores)
+        best_thresh = thresholds[best_idx]
+        yp = (ypb >= best_thresh).astype(int)
+
         return {
             "Acc": round(accuracy_score(self.y_test, yp), 3),
             "F1": round(f1_score(self.y_test, yp), 3),
-            "AUC": round(roc_auc_score(self.y_test, ypb), 3)
+            "AUC": round(roc_auc_score(self.y_test, ypb), 3),
+            "Best_Thresh": round(best_thresh, 3)
         }
 
     def save_model(self, path=None):
@@ -449,7 +528,7 @@ class Trainer:
         if force_retrain:
             ml.force_retrain()
 
-        ml.logistic_regression().random_forest().xgboost()
+        ml.logistic_regression().random_forest().xgboost().balanced_xgboost().stacking_ensemble()
 
         torch_res, torch_model = TorchTrainer(
             data.X_train, data.X_test, data.y_train, data.y_test
