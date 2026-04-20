@@ -1,0 +1,5 @@
+Method,Accuracy,Macro_F1,Kappa
+Majority,0.5164,0.227,0.0
+KNN (k=5),0.7208,0.7068,0.539
+MICE,0.3925,0.3085,0.1523
+Proposed (BXGB),0.7852,0.7701,0.6378

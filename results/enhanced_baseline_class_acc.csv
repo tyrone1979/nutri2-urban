@@ -1,0 +1,4 @@
+Class,n,Majority,KNN (k=5),MICE,RF-Imputer,Proposed (BXGB)
+Rural,3150,1.0,0.7825,0.333,0.8778,0.8787
+Transitional,1364,0.0,0.9318,0.9751,1.0,0.9927
+Urban,1586,0.0,0.4168,0.0095,0.3878,0.4212

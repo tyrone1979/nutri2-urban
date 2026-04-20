@@ -1,0 +1,2 @@
+temporal_acc,temporal_f1,n_train,n_test
+0.7472037484885127,0.7697209177500701,75462,26464

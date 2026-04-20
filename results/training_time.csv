@@ -1,0 +1,5 @@
+Method,Training_Time_s,Load_Time_s
+Proposed (BXGB),N/A (pre-trained),0.008
+KNN (k=5),0 (lazy),N/A
+RF-Imputer,0 (online),N/A
+MICE,0 (online),N/A

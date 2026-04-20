@@ -1,0 +1,16 @@
+feature_1,feature_2,interaction_strength
+fat_energy_ratio,carbo_energy_ratio,0.05064936727285385
+fat_energy_ratio,Year,0.026688696816563606
+protn_energy_ratio,Year,0.020831994712352753
+fat_energy_ratio,protn_energy_ratio,0.020479971542954445
+protn_energy_ratio,Province,0.019994478672742844
+carbo_energy_ratio,Year,0.01944715902209282
+carbo_energy_ratio,Province,0.019164111465215683
+fat_energy_ratio,Province,0.018166163936257362
+fat_energy_ratio,fat_carbo_ratio,0.015191716141998768
+carbo_energy_ratio,protn_energy_ratio,0.013489143922924995
+Year,Province,0.01342843659222126
+protn_energy_ratio,fat_carbo_ratio,0.011832999996840954
+carbo_energy_ratio,fat_carbo_ratio,0.010613500140607357
+fat_carbo_ratio,Year,0.010276084765791893
+fat_carbo_ratio,Province,0.009385373443365097
