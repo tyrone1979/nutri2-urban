@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
 """
-Leave-One-Year-Out Validation
-比 temporal split 更细粒度的时间泛化验证
+Leave-One-Year-Out Validation + 生成 Figure 4
 """
 import numpy as np
 import pandas as pd
-import joblib
+import matplotlib.pyplot as plt
 from xgboost import XGBClassifier
 from sklearn.metrics import accuracy_score, f1_score, cohen_kappa_score
 from sklearn.preprocessing import StandardScaler
-from collections import Counter
 import warnings
+import os
 
 warnings.filterwarnings('ignore')
+
+
+def save_figure(fig, filename_base, dpi=300):
+    """保存图片为 PNG 和 TIFF 格式"""
+    os.makedirs("./figures", exist_ok=True)
+    fig.savefig(f"./figures/{filename_base}.png", dpi=dpi, bbox_inches='tight')
+    fig.savefig(f"./figures/{filename_base}.tiff", dpi=dpi, bbox_inches='tight',
+                format='tiff', pil_kwargs={'compression': 'tiff_lzw'})
+    print(f"   ✅ {filename_base}.png 和 {filename_base}.tiff 已保存")
 
 
 def load_full_data():
@@ -40,9 +48,9 @@ def load_full_data():
 
 
 def run_leave_one_year_out():
-    print("=" * 70)
+    print("=" * 80)
     print("🧪 Leave-One-Year-Out Validation")
-    print("=" * 70)
+    print("=" * 80)
 
     print("\n[1/2] 加载数据...")
     df = load_full_data()
@@ -51,14 +59,13 @@ def run_leave_one_year_out():
     print(f"   年份: {years}")
 
     feature_cols = ['fat_energy_ratio', 'carbo_energy_ratio', 'protn_energy_ratio',
-                    'fat_carbo_ratio', 'Province']
+                    'fat_carbo_ratio', 'Year', 'Province']
 
     results = []
 
     print("\n[2/2] 运行 Leave-One-Year-Out...")
 
     for test_year in years:
-        # 分割
         train_mask = df['Year'] != test_year
         test_mask = df['Year'] == test_year
 
@@ -67,12 +74,10 @@ def run_leave_one_year_out():
         X_test = df.loc[test_mask, feature_cols].values
         y_test = df.loc[test_mask, 'label'].values
 
-        # 标准化
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_train)
         X_test = scaler.transform(X_test)
 
-        # 训练
         n_neg = (y_train == 0).sum()
         n_pos = (y_train == 1).sum()
 
@@ -85,7 +90,6 @@ def run_leave_one_year_out():
         )
         model.fit(X_train, y_train)
 
-        # 评估
         y_pred = model.predict(X_test)
 
         # 模拟填补评估
@@ -113,26 +117,60 @@ def run_leave_one_year_out():
 
         print(f"   {test_year}: N={len(X_test):5d}, Acc={acc_imp:.4f}, F1={f1_imp:.4f}, Kappa={kappa_imp:.4f}")
 
-    # 汇总
     df_results = pd.DataFrame(results)
 
-    print("\n" + "=" * 70)
-    print("📊 Leave-One-Year-Out 汇总")
-    print("=" * 70)
-    print(
-        f"   平均 Accuracy: {df_results['Imputation_Accuracy'].mean():.4f} ± {df_results['Imputation_Accuracy'].std():.4f}")
-    print(f"   平均 Macro-F1: {df_results['Imputation_F1'].mean():.4f} ± {df_results['Imputation_F1'].std():.4f}")
-    print(f"   平均 Kappa:    {df_results['Imputation_Kappa'].mean():.4f} ± {df_results['Imputation_Kappa'].std():.4f}")
-
-    # 保存
+    # 保存 CSV
     os.makedirs("./results", exist_ok=True)
     df_results.to_csv("./results/leave_one_year_out.csv", index=False)
+
+    # ========== 生成 Figure 4 ==========
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    years_str = df_results['Test_Year'].astype(str).values
+    acc = df_results['Imputation_Accuracy'].values
+    f1 = df_results['Imputation_F1'].values
+
+    # (a) Accuracy
+    ax = axes[0]
+    ax.bar(years_str, acc, color='#2E86AB', alpha=0.8, width=0.6)
+    ax.axhline(y=acc.mean(), color='#A23B72', linestyle='--', linewidth=1.5,
+               label=f'Mean = {acc.mean():.3f}')
+    ax.set_xlabel('Survey Year', fontsize=12)
+    ax.set_ylabel('Accuracy', fontsize=12)
+    ax.set_title('(a) Recovery Accuracy by Held-Out Year', fontsize=14, fontweight='bold')
+    ax.set_ylim(0.65, 0.85)
+    ax.legend(fontsize=10, loc='lower right')
+    ax.grid(True, alpha=0.3, axis='y')
+
+    # (b) Macro-F1
+    ax = axes[1]
+    ax.bar(years_str, f1, color='#F18F01', alpha=0.8, width=0.6)
+    ax.axhline(y=f1.mean(), color='#A23B72', linestyle='--', linewidth=1.5,
+               label=f'Mean = {f1.mean():.3f}')
+    ax.set_xlabel('Survey Year', fontsize=12)
+    ax.set_ylabel('Macro-F1', fontsize=12)
+    ax.set_title('(b) Macro-F1 by Held-Out Year', fontsize=14, fontweight='bold')
+    ax.set_ylim(0.60, 0.85)
+    ax.legend(fontsize=10, loc='lower right')
+    ax.grid(True, alpha=0.3, axis='y')
+
+    plt.tight_layout()
+    save_figure(fig, "Fig4_temporal_validation", dpi=300)
+    plt.close()
+
+    # 打印汇总
+    print("\n" + "=" * 80)
+    print("📊 Leave-One-Year-Out 汇总")
+    print("=" * 80)
+    print(f"   平均 Accuracy: {acc.mean():.4f} ± {acc.std():.4f}")
+    print(f"   平均 Macro-F1: {f1.mean():.4f} ± {f1.std():.4f}")
+    print(f"   平均 Kappa:    {df_results['Imputation_Kappa'].mean():.4f} ± {df_results['Imputation_Kappa'].std():.4f}")
+
     print("\n✅ 结果已保存至: results/leave_one_year_out.csv")
+    print("✅ 图片已保存至: figures/Fig4_temporal_validation.tiff")
 
     return df_results
 
 
 if __name__ == "__main__":
-    import os
-
     df_results = run_leave_one_year_out()

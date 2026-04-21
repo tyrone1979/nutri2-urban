@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 缺失率敏感性分析：10%, 20%, 30%, 40%, 50%, 60%, 70%
+生成 PNG（预览）和 TIFF（投稿用，300 dpi）
 """
 import numpy as np
 import pandas as pd
@@ -26,6 +27,15 @@ def compute_fidelity(y_true, y_imp, n_classes=3):
     imp_dist = imp_counts / len(y_imp)
     js_div = jensenshannon(true_dist, imp_dist)
     return js_div
+
+
+def save_figure(fig, filename_base, dpi=300):
+    """
+    保存图片为 TIFF 格式
+    """
+    fig.savefig(f"./figures/{filename_base}.tiff", dpi=dpi, bbox_inches='tight',
+                format='tiff', pil_kwargs={'compression': 'tiff_lzw'})
+    print(f"   ✅ {filename_base}.tiff 已保存")
 
 
 def run_missing_rate_sensitivity(missing_rates=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7], random_state=42):
@@ -115,72 +125,72 @@ def run_missing_rate_sensitivity(missing_rates=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.
     df_results = pd.DataFrame(all_results)
     df_class = pd.DataFrame(class_acc_results)
 
-    # 保存
+    # 保存 CSV
     os.makedirs("./results", exist_ok=True)
     os.makedirs("./figures", exist_ok=True)
     df_results.to_csv("./results/missing_rate_sensitivity.csv", index=False)
     df_class.to_csv("./results/missing_rate_class_acc.csv", index=False)
 
-    # ========== 可视化 ==========
+    # ========== Figure 2: 缺失率敏感性（四合一图） ==========
     fig, axes = plt.subplots(2, 2, figsize=(14, 12))
 
     # 1. Accuracy vs Missing Rate
     ax = axes[0, 0]
     ax.plot(np.array(missing_rates) * 100, df_results['proposed_acc'],
-            'o-', linewidth=2.5, markersize=10, label='Proposed (BXGB)', color='#2E86AB')
+            'o-', linewidth=2.5, markersize=10, label='Proposed', color='#2E86AB')
     ax.plot(np.array(missing_rates) * 100, df_results['knn_acc'],
-            's-', linewidth=2.5, markersize=10, label='KNN (k=5)', color='#A23B72')
+            's-', linewidth=2.5, markersize=10, label='KNN', color='#A23B72')
     ax.set_xlabel('Missing Rate (%)', fontsize=12)
     ax.set_ylabel('Accuracy', fontsize=12)
-    ax.set_title('Accuracy vs Missing Rate', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=11)
+    ax.set_title('(a) Accuracy vs Missing Rate', fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11, loc='lower left')
     ax.grid(True, alpha=0.3)
-    ax.set_ylim(0.65, 0.85)
+    ax.set_ylim(0.68, 0.82)
 
     # 2. Macro-F1 vs Missing Rate
     ax = axes[0, 1]
     ax.plot(np.array(missing_rates) * 100, df_results['proposed_f1'],
-            'o-', linewidth=2.5, markersize=10, label='Proposed (BXGB)', color='#2E86AB')
+            'o-', linewidth=2.5, markersize=10, label='Proposed', color='#2E86AB')
     ax.plot(np.array(missing_rates) * 100, df_results['knn_f1'],
-            's-', linewidth=2.5, markersize=10, label='KNN (k=5)', color='#A23B72')
+            's-', linewidth=2.5, markersize=10, label='KNN', color='#A23B72')
     ax.set_xlabel('Missing Rate (%)', fontsize=12)
     ax.set_ylabel('Macro-F1', fontsize=12)
-    ax.set_title('Macro-F1 vs Missing Rate', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=11)
+    ax.set_title('(b) Macro-F1 vs Missing Rate', fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11, loc='lower left')
     ax.grid(True, alpha=0.3)
     ax.set_ylim(0.65, 0.80)
 
     # 3. JS Divergence vs Missing Rate
     ax = axes[1, 0]
     ax.plot(np.array(missing_rates) * 100, df_results['proposed_js'],
-            'o-', linewidth=2.5, markersize=10, label='Proposed (BXGB)', color='#2E86AB')
+            'o-', linewidth=2.5, markersize=10, label='Proposed', color='#2E86AB')
     ax.plot(np.array(missing_rates) * 100, df_results['knn_js'],
-            's-', linewidth=2.5, markersize=10, label='KNN (k=5)', color='#A23B72')
+            's-', linewidth=2.5, markersize=10, label='KNN', color='#A23B72')
     ax.set_xlabel('Missing Rate (%)', fontsize=12)
     ax.set_ylabel('JS Divergence', fontsize=12)
-    ax.set_title('Distribution Fidelity vs Missing Rate', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=11)
+    ax.set_title('(c) Distribution Fidelity vs Missing Rate', fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11, loc='upper left')
     ax.grid(True, alpha=0.3)
 
     # 4. Class-specific Accuracy
     ax = axes[1, 1]
+    colors = {'Rural': '#2E86AB', 'Transitional': '#F18F01', 'Urban': '#A23B72'}
     for class_name in ['Rural', 'Transitional', 'Urban']:
         class_data = df_class[df_class['class'] == class_name]
         ax.plot(np.array(missing_rates) * 100, class_data['proposed_acc'],
-                'o-', linewidth=2, markersize=8, label=f'{class_name} (Proposed)')
+                'o-', linewidth=2, markersize=8, label=class_name, color=colors[class_name])
     ax.set_xlabel('Missing Rate (%)', fontsize=12)
     ax.set_ylabel('Accuracy', fontsize=12)
-    ax.set_title('Class-Specific Accuracy (Proposed)', fontsize=14, fontweight='bold')
+    ax.set_title('(d) Class-Specific Accuracy (Proposed)', fontsize=14, fontweight='bold')
     ax.legend(fontsize=10)
     ax.grid(True, alpha=0.3)
-    ax.set_ylim(0, 1.05)
+    ax.set_ylim(0.35, 1.05)
 
     plt.tight_layout()
-    plt.savefig("./figures/missing_rate_sensitivity.png", dpi=300, bbox_inches='tight')
+    save_figure(fig, "Fig2_missing_rate_robustness", dpi=300)
     plt.close()
-    print(f"\n   ✅ missing_rate_sensitivity.png 已保存")
 
-    # ========== 额外：Proposed vs KNN 差异图 ==========
+    # ========== Figure S5: Proposed vs KNN 差异图 ==========
     fig, ax = plt.subplots(figsize=(10, 6))
 
     x = np.array(missing_rates) * 100
@@ -199,16 +209,14 @@ def run_missing_rate_sensitivity(missing_rates=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("./figures/missing_rate_advantage.png", dpi=300, bbox_inches='tight')
+    save_figure(fig, "FigS5_advantage_missing_rates", dpi=300)
     plt.close()
-    print(f"   ✅ missing_rate_advantage.png 已保存")
 
     # 打印汇总
     print("\n" + "=" * 80)
     print("📊 缺失率敏感性汇总")
     print("=" * 80)
-    print(df_results[['missing_rate', 'proposed_acc', 'proposed_f1', 'knn_acc', 'knn_f1', 'proposed_js']].to_string(
-        index=False))
+    print(df_results[['missing_rate', 'proposed_acc', 'proposed_f1', 'knn_acc', 'knn_f1', 'proposed_js']].to_string(index=False))
 
     # 计算性能下降率
     acc_10 = df_results[df_results['missing_rate'] == 0.1]['proposed_acc'].values[0]
@@ -226,16 +234,6 @@ def run_missing_rate_sensitivity(missing_rates=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.
     print(f"\n📊 Proposed 相对于 KNN 的平均优势:")
     print(f"   Accuracy: +{avg_acc_adv:.4f} ({avg_acc_adv * 100:.1f} 个百分点)")
     print(f"   Macro-F1: +{avg_f1_adv:.4f} ({avg_f1_adv * 100:.1f} 个百分点)")
-
-    # 各类别汇总
-    print("\n" + "=" * 80)
-    print("📊 各类别准确率随缺失率变化")
-    print("=" * 80)
-    for class_name in ['Rural', 'Transitional', 'Urban']:
-        class_data = df_class[df_class['class'] == class_name]
-        print(f"\n{class_name}:")
-        for _, row in class_data.iterrows():
-            print(f"  {row['missing_rate'] * 100:.0f}%: Proposed={row['proposed_acc']:.4f}, KNN={row['knn_acc']:.4f}")
 
     return df_results, df_class
 
