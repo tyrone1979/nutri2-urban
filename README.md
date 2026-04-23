@@ -1,10 +1,10 @@
-# An Explainable AI Framework with SHAP-Enhanced Ensemble Learning for Intelligent Urban-Rural Dietary Pattern Recognition
+# A Data-Driven Framework to Infer Urban–Rural Context from Dietary Patterns
 
 ---
 
 ## Overview
 
-This repository implements an **explainable AI framework** for urban-rural dietary pattern classification using the China Health and Nutrition Survey (CHNS) dataset. The framework integrates ensemble learning with SHAP-based interpretability to provide both accurate predictions and actionable insights for population health analytics.
+This repository developed a supervised machine learning framework based on gradient-boosted decision trees to infer a three-category urban–rural classification. Model performance was evaluated using cross-validation, leave-one-year-out validation, and simulated missingness scenarios (10–70%). Calibration and the impact on downstream epidemiological analyses were also assessed.
 
 ### Key Achievements
 
