@@ -7,9 +7,9 @@ import pandas as pd
 import joblib
 from sklearn.metrics import accuracy_score, f1_score, cohen_kappa_score
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
 from collections import Counter
 from scipy.spatial.distance import jensenshannon
 import warnings
@@ -28,6 +28,26 @@ def compute_fidelity(y_true, y_imp, n_classes=3):
     js_div = jensenshannon(true_dist, imp_dist)
     max_diff = np.max(np.abs(imp_dist - true_dist))
     return js_div, max_diff
+
+
+def mice_impute_labels(X, y_masked, mask, n_iter=10, random_state=42):
+    """Iterative imputation: multinomial logistic regression for categorical outcome."""
+    y_imp = y_masked.copy()
+    missing_idx = np.where(mask)[0]
+    observed_idx = np.where(~mask)[0]
+    if len(observed_idx) == 0:
+        return y_imp
+
+    majority = Counter(y_masked[observed_idx]).most_common(1)[0][0]
+    y_imp[missing_idx] = majority
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    for _ in range(n_iter):
+        lr = LogisticRegression(max_iter=1000, random_state=random_state, n_jobs=1)
+        lr.fit(X_scaled[observed_idx], y_imp[observed_idx])
+        y_imp[missing_idx] = lr.predict(X_scaled[missing_idx])
+    return y_imp
 
 
 def rf_impute(X_complete, y_masked, mask, random_state=42):
@@ -63,7 +83,7 @@ def run_enhanced_baseline_comparison(missing_rate=0.3, random_state=42):
     增强版 Baseline 对比
     """
     print("=" * 80)
-    print(f"🧪 增强版 Baseline 对比 (Missing Rate = {missing_rate * 100:.0f}%)")
+    print(f"Enhanced baseline comparison (Missing Rate = {missing_rate * 100:.0f}%)")
     print("=" * 80)
 
     # 加载数据
@@ -71,7 +91,7 @@ def run_enhanced_baseline_comparison(missing_rate=0.3, random_state=42):
     data = DataPipeline().load()
     X_test = data.X_test
     y_test = data.y_test
-    print(f"   ✅ 测试集: {len(X_test)} 样本")
+    print(f"   Test set: {len(X_test)} samples")
 
     print("\n[2/3] 加载模型...")
     model = joblib.load("./saved_models/Balanced_XGBoost.pkl")
@@ -98,14 +118,9 @@ def run_enhanced_baseline_comparison(missing_rate=0.3, random_state=42):
     y_imp_knn = y_masked.copy()
     y_imp_knn[mask] = knn.predict(X_test[mask])
 
-    # ========== 3. MICE (IterativeImputer) ==========
-    print("   运行 MICE...")
-    X_with_label = np.column_stack([X_test, y_masked.astype(float)])
-    X_with_label[X_with_label == -1] = np.nan
-    imputer = IterativeImputer(max_iter=10, random_state=random_state)
-    X_imputed = imputer.fit_transform(X_with_label)
-    y_imp_mice = X_imputed[:, -1].round().astype(int)
-    y_imp_mice = np.clip(y_imp_mice, 0, 2)
+    # ========== 3. MICE-style iterative imputation (multinomial logistic for categorical y) ==========
+    print("   运行 MICE (multinomial logistic for labels)...")
+    y_imp_mice = mice_impute_labels(X_test, y_masked, mask, random_state=random_state)
 
     # ========== 4. RandomForest Imputer (代替 MissForest) ==========
     print("   运行 RandomForest Imputer...")

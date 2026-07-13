@@ -315,11 +315,13 @@ def main():
     )
 
     intro_final = (
-        "The present study addresses this gap by developing and evaluating a statistical framework to infer missing "
-        "administrative urban–rural labels from routinely collected dietary information. Using longitudinal CHNS data "
-        "(1991–2011) with complete T2 administrative labels as reference standard, we assess whether macronutrient "
-        "composition and spatiotemporal covariates support reliable label recovery under simulated missingness, temporal "
-        "holdout, and downstream epidemiological use-cases."
+        "The present study addresses this gap by proposing a reproducible statistical evaluation protocol "
+        "for assessing contextual label inference methods, using CHNS as an illustrative testbed. Rather than "
+        "claiming optimal prediction, we establish a multi-dimensional validation framework that includes: "
+        "(i) simulated missingness at varying rates; (ii) leave-one-year-out temporal generalisability; "
+        "(iii) distributional fidelity via Jensen–Shannon divergence; (iv) probabilistic calibration assessment; "
+        "and (v) downstream effect preservation. This protocol provides a template for future studies evaluating "
+        "label-imputation methods when ground-truth contextual variables are available."
     )
 
     output_line = (
@@ -363,17 +365,19 @@ def main():
     )
 
     inference_para = (
-        f"Under the primary evaluation scenario (30% simulated missingness), the proposed framework achieved "
-        f"accuracy {prop_acc:.3f} and macro-F1 {prop_f1:.3f}, outperforming KNN imputation (accuracy {knn_acc:.3f}) "
-        f"and MICE (accuracy {mice_acc:.3f}) (Table 3). Random forest imputation achieved comparable performance "
-        f"(accuracy {rf_acc:.3f}; macro-F1 {baseline.loc[baseline['Method']=='RF-Imputer','Macro_F1'].iloc[0]:.3f})."
+        f"Under 30% simulated missingness, the proposed framework achieved three-class accuracy "
+        f"{prop_acc:.3f} and macro-F1 {prop_f1:.3f} (Table 3). "
+        f"It is important to note that Transitional accuracy is partially definitional due to the FatER-based "
+        f"label construction; therefore, the remainder of this section focuses on the binary administrative "
+        f"discrimination task (Rural vs. Urban), which avoids circularity."
     )
 
     comparator_para = (
         f"The strongest comparator, random forest imputation, achieved slightly lower performance (accuracy {rf_acc:.3f}; "
         f"macro-F1 {baseline.loc[baseline['Method']=='RF-Imputer','Macro_F1'].iloc[0]:.3f}). KNN imputation showed "
-        f"lower performance (accuracy {knn_acc:.3f}), while MICE performed poorly (accuracy {mice_acc:.3f}), "
-        f"reflecting limitations for categorical outcomes derived from behavioural data."
+        f"lower performance (accuracy {knn_acc:.3f}), while corrected multinomial-logistic MICE "
+        f"(accuracy {mice_acc:.3f}) remained below tree-based methods, "
+        f"suggesting non-linear structure in the macronutrient–residence relationship."
     )
 
     gain_para = (
@@ -443,8 +447,9 @@ def main():
         "In this study, we developed and evaluated a statistical framework for inferring missing administrative "
         "urban–rural labels from dietary survey data. Using CHNS as an illustrative cohort with complete T2 labels, "
         "we showed that inference accuracy under masked labels was moderate and stable across missingness levels and "
-        "survey years (accuracy approximately 0.78–0.79 under primary scenarios). Downstream analyses preserved "
-        "direction and statistical significance of urban–rural contrasts, although effect sizes were moderately inflated."
+        "survey years (accuracy approximately 0.78–0.79 under the three-class descriptive framework; binary primary "
+        "task accuracy: 0.716). Downstream analyses preserved direction and statistical significance of urban–rural "
+        "contrasts, although effect sizes were moderately inflated."
     )
 
     finding_first = (

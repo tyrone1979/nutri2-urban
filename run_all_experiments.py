@@ -54,6 +54,8 @@ STEPS = [
     ("bootstrap_analysis.py", None),
     ("downstream_bias_analysis.py", None),
     ("feature_ablation.py", None),
+    ("binary_classification.py", None),
+    ("threshold_tuning.py", None),
     ("paired_bootstrap_test.py", None),
     ("shap_analysis.py", None),
     ("threshold_sensitivity.py", None),

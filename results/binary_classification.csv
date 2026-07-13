@@ -1,0 +1,2 @@
+scenario,missing_rate,n_test,n_masked,accuracy_masked,macro_f1_masked,weighted_f1_masked,kappa_masked,urban_recall_masked,rural_recall_masked,rural_precision_masked,urban_precision_masked,holdout_accuracy,holdout_f1
+binary_nontransitional,0.3,15790,4802,0.7155,0.5047,0.6982,0.3167,0.419,0.8723,0.7395,0.6345,0.7216,0.5109
