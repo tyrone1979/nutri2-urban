@@ -1,6 +1,6 @@
 ﻿,Acc,F1,AUC,Time(s)
-Logistic_Regression,0.679,0.661,0.842,0.21
-Random_Forest,0.774,0.755,0.909,13.16
-XGBoost,0.781,0.768,0.915,1.36
-Balanced_XGBoost,0.782,0.77,0.915,2.98
-PyTorch_MLP,0.773,0.764,0.909,0.0
+Logistic_Regression,0.679,0.661,0.842,2.56
+Random_Forest,0.774,0.755,0.909,91.68
+XGBoost,0.781,0.768,0.915,19.96
+Balanced_XGBoost,0.782,0.77,0.915,51.61
+PyTorch_MLP,0.775,0.757,0.909,167.32

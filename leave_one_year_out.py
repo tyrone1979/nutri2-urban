@@ -2,16 +2,20 @@
 """
 Leave-One-Year-Out Validation + 生成 Figure 4
 """
+import os
+import warnings
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from xgboost import XGBClassifier
-from sklearn.metrics import accuracy_score, f1_score, cohen_kappa_score
+from sklearn.metrics import accuracy_score, cohen_kappa_score, f1_score
 from sklearn.preprocessing import StandardScaler
-import warnings
-import os
+from xgboost import XGBClassifier
 
 warnings.filterwarnings('ignore')
+
+from data_pipeline import engineer_columns
+from features import FEATURE_COLS
 
 
 def save_figure(fig, filename_base, dpi=300):
@@ -30,21 +34,7 @@ def load_full_data():
     df.columns = df.columns.str.upper()
     df = df[['T2', 'T1', 'WAVE', 'D3KCAL', 'D3CARBO', 'D3FAT', 'D3PROTN']].dropna()
     df = df[(df.D3KCAL > 500) & (df.D3KCAL < 5000)]
-
-    # 特征工程
-    df['fat_energy_ratio'] = df.D3FAT * 9 / df.D3KCAL
-    df['carbo_energy_ratio'] = df.D3CARBO * 4 / df.D3KCAL
-    df['protn_energy_ratio'] = df.D3PROTN * 4 / df.D3KCAL
-    df['fat_carbo_ratio'] = df.D3FAT / (df.D3CARBO + 1e-6)
-    df['Year'] = df['WAVE'].astype(int)
-    df['Province'] = df['T1'].astype(int)
-
-    # 标签
-    df['label'] = 0
-    df.loc[df['T2'] == 1, 'label'] = 2
-    df.loc[(df['fat_energy_ratio'] >= 0.23) & (df['fat_energy_ratio'] <= 0.30), 'label'] = 1
-
-    return df
+    return engineer_columns(df)
 
 
 def run_leave_one_year_out():
@@ -58,9 +48,7 @@ def run_leave_one_year_out():
     print(f"   ✅ 总样本: {len(df)}")
     print(f"   年份: {years}")
 
-    feature_cols = ['fat_energy_ratio', 'carbo_energy_ratio', 'protn_energy_ratio',
-                    'fat_carbo_ratio', 'Year', 'Province']
-
+    feature_cols = FEATURE_COLS
     results = []
 
     print("\n[2/2] 运行 Leave-One-Year-Out...")
@@ -90,9 +78,6 @@ def run_leave_one_year_out():
         )
         model.fit(X_train, y_train)
 
-        y_pred = model.predict(X_test)
-
-        # 模拟填补评估
         np.random.seed(42)
         mask = np.random.choice([True, False], size=len(y_test), p=[0.3, 0.7])
         y_masked = y_test.copy()
@@ -118,19 +103,14 @@ def run_leave_one_year_out():
         print(f"   {test_year}: N={len(X_test):5d}, Acc={acc_imp:.4f}, F1={f1_imp:.4f}, Kappa={kappa_imp:.4f}")
 
     df_results = pd.DataFrame(results)
-
-    # 保存 CSV
     os.makedirs("./results", exist_ok=True)
     df_results.to_csv("./results/leave_one_year_out.csv", index=False)
 
-    # ========== 生成 Figure 4 ==========
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
     years_str = df_results['Test_Year'].astype(str).values
     acc = df_results['Imputation_Accuracy'].values
     f1 = df_results['Imputation_F1'].values
 
-    # (a) Accuracy
     ax = axes[0]
     ax.bar(years_str, acc, color='#2E86AB', alpha=0.8, width=0.6)
     ax.axhline(y=acc.mean(), color='#A23B72', linestyle='--', linewidth=1.5,
@@ -138,11 +118,12 @@ def run_leave_one_year_out():
     ax.set_xlabel('Survey Year', fontsize=12)
     ax.set_ylabel('Accuracy', fontsize=12)
     ax.set_title('(a) Recovery Accuracy by Held-Out Year', fontsize=14, fontweight='bold')
-    ax.set_ylim(0.65, 0.85)
+    y_lo = max(0.0, acc.min() - 0.05)
+    y_hi = min(1.0, acc.max() + 0.05)
+    ax.set_ylim(y_lo, y_hi)
     ax.legend(fontsize=10, loc='lower right')
     ax.grid(True, alpha=0.3, axis='y')
 
-    # (b) Macro-F1
     ax = axes[1]
     ax.bar(years_str, f1, color='#F18F01', alpha=0.8, width=0.6)
     ax.axhline(y=f1.mean(), color='#A23B72', linestyle='--', linewidth=1.5,
@@ -150,7 +131,9 @@ def run_leave_one_year_out():
     ax.set_xlabel('Survey Year', fontsize=12)
     ax.set_ylabel('Macro-F1', fontsize=12)
     ax.set_title('(b) Macro-F1 by Held-Out Year', fontsize=14, fontweight='bold')
-    ax.set_ylim(0.60, 0.85)
+    y_lo = max(0.0, f1.min() - 0.05)
+    y_hi = min(1.0, f1.max() + 0.05)
+    ax.set_ylim(y_lo, y_hi)
     ax.legend(fontsize=10, loc='lower right')
     ax.grid(True, alpha=0.3, axis='y')
 
@@ -158,7 +141,6 @@ def run_leave_one_year_out():
     save_figure(fig, "Fig4_temporal_validation", dpi=300)
     plt.close()
 
-    # 打印汇总
     print("\n" + "=" * 80)
     print("📊 Leave-One-Year-Out 汇总")
     print("=" * 80)
@@ -173,4 +155,4 @@ def run_leave_one_year_out():
 
 
 if __name__ == "__main__":
-    df_results = run_leave_one_year_out()
+    run_leave_one_year_out()

@@ -12,7 +12,7 @@ import os
 
 warnings.filterwarnings('ignore')
 
-from model import DataPipeline
+from model import DataPipeline, NUTRIENT_ALL_NAMES
 
 
 def save_figure(fig, filename_base, dpi=300):
@@ -90,11 +90,10 @@ def run_downstream_analysis():
     y_imputed = y_masked.copy()
     y_imputed[mask] = np.argmax(y_proba[mask], axis=1)
 
-    # 还原原始特征值
-    scaler = joblib.load("./saved_models/scaler.pkl")
-    X_original = scaler.inverse_transform(data.X_test)
+    # Raw macronutrients (incl. FatER) for epidemiological effect sizes
+    X_original = data.nutrients_test
 
-    features = ['FatER', 'CarbER', 'ProtER', 'Fat/Carb']
+    features = NUTRIENT_ALL_NAMES
     feature_labels = ['Fat Energy\nRatio', 'Carbohydrate\nEnergy Ratio',
                       'Protein Energy\nRatio', 'Fat-to-Carbohydrate\nRatio']
 

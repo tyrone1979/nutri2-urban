@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""
-Bootstrap 不确定性分析
-计算填补性能、效应量偏差的 95% 置信区间
-"""
+"""Bootstrap 不确定性分析 — 计算填补性能的 95% 置信区间"""
+import os
+import sys
+
+print("bootstrap_analysis: starting (unbuffered)...", flush=True)
+
 import numpy as np
 import pandas as pd
 import joblib
@@ -10,6 +12,7 @@ from sklearn.metrics import accuracy_score, f1_score, cohen_kappa_score
 from sklearn.neighbors import KNeighborsClassifier
 from collections import Counter
 from scipy.spatial.distance import jensenshannon
+from tqdm import tqdm
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -37,7 +40,7 @@ def compute_effect_size(X_original, y_labels, feature_idx=0):
     return urban.mean() - rural.mean()
 
 
-def bootstrap_imputation_evaluation(data, model, scaler, n_boot=1000, missing_rate=0.3, random_seed=42):
+def bootstrap_imputation_evaluation(data, model, scaler, n_boot=200, missing_rate=0.3, random_seed=42):
     """
     Bootstrap 评估填补性能
     """
@@ -47,17 +50,18 @@ def bootstrap_imputation_evaluation(data, model, scaler, n_boot=1000, missing_ra
     y_test = data.y_test
     n_samples = len(y_test)
 
-    # 还原原始特征
-    X_original = scaler.inverse_transform(X_test)
+    X_original = data.nutrients_test
 
     results = []
 
-    print(f"\n🔄 Bootstrap 抽样 (n={n_boot})...")
-
-    for i in range(n_boot):
-        if (i + 1) % 200 == 0:
-            print(f"   进度: {i + 1}/{n_boot}")
-
+    iterator = tqdm(
+        range(n_boot),
+        desc="Bootstrap",
+        unit="iter",
+        file=sys.stdout,
+        dynamic_ncols=True,
+    )
+    for _ in iterator:
         # Bootstrap 重抽样
         indices = np.random.choice(n_samples, size=n_samples, replace=True)
         X_boot = X_test[indices]
@@ -98,9 +102,8 @@ def bootstrap_imputation_evaluation(data, model, scaler, n_boot=1000, missing_ra
         acc_k = accuracy_score(y_boot[mask_eval], y_imp_knn[mask_eval])
         f1_k = f1_score(y_boot[mask_eval], y_imp_knn[mask_eval], average='macro')
 
-        # 效应量偏差（FatER）
-        true_eff = compute_effect_size(X_orig_boot, y_boot, feature_idx=0)
-        imp_eff = compute_effect_size(X_orig_boot, y_imp_proposed, feature_idx=0)
+        true_eff = compute_effect_size(X_orig_boot, y_boot, feature_idx=idx)
+        imp_eff = compute_effect_size(X_orig_boot, y_imp_proposed, feature_idx=idx)
         bias = imp_eff - true_eff
         bias_pct = abs(bias) / abs(true_eff) * 100 if true_eff != 0 else 0
 
@@ -135,22 +138,21 @@ def bootstrap_imputation_evaluation(data, model, scaler, n_boot=1000, missing_ra
     return df_results, summary
 
 
-def run_bootstrap_analysis(n_boot=1000):
-    print("=" * 70)
-    print("🧪 Bootstrap 不确定性分析")
-    print("=" * 70)
+def run_bootstrap_analysis(n_boot=200):
+    print("=" * 70, flush=True)
+    print("🧪 Bootstrap 不确定性分析", flush=True)
+    print("=" * 70, flush=True)
 
-    # 加载数据
-    print("\n[1/3] 加载数据...")
-    data = DataPipeline().load()
-    print(f"   ✅ 测试集: {len(data.y_test)} 样本")
+    print("\n[1/3] 加载数据...", flush=True)
+    data = DataPipeline().load(verbose=False)
+    print(f"   ✅ 测试集: {len(data.y_test)} 样本", flush=True)
 
-    print("\n[2/3] 加载模型和标准化器...")
+    print("\n[2/3] 加载模型和标准化器...", flush=True)
     model = joblib.load("./saved_models/Balanced_XGBoost.pkl")
     scaler = joblib.load("./saved_models/scaler.pkl")
-    print("   ✅ 加载完成")
+    print("   ✅ 加载完成", flush=True)
 
-    print("\n[3/3] 运行 Bootstrap...")
+    print(f"\n[3/3] 运行 Bootstrap (n={n_boot})...", flush=True)
     df_results, summary = bootstrap_imputation_evaluation(
         data, model, scaler, n_boot=n_boot, missing_rate=0.3
     )
@@ -206,4 +208,4 @@ def run_bootstrap_analysis(n_boot=1000):
 if __name__ == "__main__":
     import os
 
-    df_results, summary = run_bootstrap_analysis(n_boot=1000)
+    df_results, summary = run_bootstrap_analysis(n_boot=int(os.environ.get("N_BOOT", "200")))

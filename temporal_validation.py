@@ -11,6 +11,9 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
+from data_pipeline import engineer_columns
+from features import FEATURE_COLS
+
 
 def run_temporal_validation():
     print("=" * 70)
@@ -23,29 +26,15 @@ def run_temporal_validation():
     df.columns = df.columns.str.upper()
     df = df[['T2', 'T1', 'WAVE', 'D3KCAL', 'D3CARBO', 'D3FAT', 'D3PROTN']].dropna()
     df = df[(df.D3KCAL > 500) & (df.D3KCAL < 5000)]
+    df = engineer_columns(df)
 
-    # 特征工程
-    df['fat_energy_ratio'] = df.D3FAT * 9 / df.D3KCAL
-    df['carbo_energy_ratio'] = df.D3CARBO * 4 / df.D3KCAL
-    df['protn_energy_ratio'] = df.D3PROTN * 4 / df.D3KCAL
-    df['fat_carbo_ratio'] = df.D3FAT / (df.D3CARBO + 1e-6)
-    df['Year'] = df['WAVE'].astype(int)
-    df['Province'] = df['T1'].astype(int)
-
-    # 3分类标签
-    df['label'] = 0
-    df.loc[df['T2'] == 1, 'label'] = 2
-    df.loc[(df['fat_energy_ratio'] >= 0.23) & (df['fat_energy_ratio'] <= 0.30), 'label'] = 1
-
-    # 时间分割
     train_mask = df['Year'] <= 2006
     test_mask = df['Year'] >= 2009
 
-    X_train = df.loc[train_mask, ['fat_energy_ratio', 'carbo_energy_ratio',
-                                  'protn_energy_ratio', 'fat_carbo_ratio', 'Year', 'Province']].values
+    cols = FEATURE_COLS
+    X_train = df.loc[train_mask, cols].values
     y_train = df.loc[train_mask, 'label'].values
-    X_test = df.loc[test_mask, ['fat_energy_ratio', 'carbo_energy_ratio',
-                                'protn_energy_ratio', 'fat_carbo_ratio', 'Year', 'Province']].values
+    X_test = df.loc[test_mask, cols].values
     y_test = df.loc[test_mask, 'label'].values
 
     # 标准化
@@ -79,11 +68,8 @@ def run_temporal_validation():
     print(f"   Accuracy:  {acc:.4f}")
     print(f"   Macro-F1:  {f1:.4f}")
 
-    # 与原模型对比
     print("\n📊 与原始测试集性能对比:")
-    print(f"   原始测试集 (随机分割): Acc ≈ 0.782, F1 ≈ 0.770")
-    print(f"   时间外部验证:          Acc = {acc:.3f}, F1 = {f1:.3f}")
-    print(f"   性能下降:              ΔAcc = {(0.782 - acc) * 100:.1f}%, ΔF1 = {(0.770 - f1) * 100:.1f}%")
+    print("   (重跑 main.py 后更新 baseline 对比数值)")
 
     # 保存
     result = {'temporal_acc': acc, 'temporal_f1': f1,

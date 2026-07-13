@@ -34,7 +34,6 @@ from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from sklearn.metrics import roc_auc_score, f1_score, accuracy_score
 
-import shap
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -49,108 +48,8 @@ RESULT_PATH = "./results/model_results.csv"
 MODEL_SAVE_DIR = "./saved_models"
 FIGURE_DIR = "./figures"
 
-# ===================== 省份编码映射（英文）=====================
-PROVINCE_SHORT = {
-    11: "Beijing", 21: "Liaoning", 23: "Heilongjiang", 31: "Shanghai",
-    32: "Jiangsu", 37: "Shandong", 41: "Henan", 42: "Hubei",
-    43: "Hunan", 45: "Guangxi", 52: "Guizhou", 55: "Chongqing"
-}
-
-
-# ===================== Data Pipeline =====================
-from sklearn.preprocessing import StandardScaler
-
-class DataPipeline:
-    def __init__(self, path=DATA_PATH):
-        self.path = path
-        self.X_train, self.X_test, self.y_train, self.y_test = None, None, None, None
-        self.year_train, self.year_test = None, None
-        self.province_train, self.province_test = None, None
-        self.feature_names = ["fat_energy_ratio", "carbo_energy_ratio", "protn_energy_ratio", "fat_carbo_ratio", "Year", "Province"]
-        self.scaler = StandardScaler()
-
-    def load(self):
-        print("[1/4] 正在加载数据...")
-        if not os.path.exists(self.path):
-            raise FileNotFoundError(f"数据文件不存在: {self.path}")
-
-        try:
-            import pyreadstat
-            print("   使用 pyreadstat 读取（更快）...")
-            df, meta = pyreadstat.read_sas7bdat(self.path)
-        except ImportError:
-            print("   pyreadstat 未安装，使用 pandas.read_sas（较慢）...")
-            print("   建议: pip install pyreadstat 加速读取")
-            df = pd.read_sas(self.path, encoding='utf-8')
-
-        df.columns = df.columns.str.upper()
-        df = df[['T2', 'T1', 'WAVE', 'D3KCAL', 'D3CARBO', 'D3FAT', 'D3PROTN']].dropna()
-        df = df[(df.D3KCAL > 500) & (df.D3KCAL < 5000)]
-
-        df['fat_pct'] = df.D3FAT * 9 / df.D3KCAL
-        df['carbo_pct'] = df.D3CARBO * 4 / df.D3KCAL
-        df['protn_pct'] = df.D3PROTN * 4 / df.D3KCAL
-        df['fat_carbo'] = df.D3FAT / (df.D3CARBO + 1e-6)
-        df['Year'] = df['WAVE'].astype(int)
-        df['Province'] = df['T1'].astype(int)
-
-        # ===================== 3分类标签 =====================
-        df['label'] = 0  # 农村
-        df.loc[df['T2'] == 1, 'label'] = 2  # 城市
-        # 中间过渡类
-        mask_mid = (df['fat_pct'] >= 0.23) & (df['fat_pct'] <= 0.30)
-        df.loc[mask_mid, 'label'] = 1
-
-        X = df[['fat_pct', 'carbo_pct', 'protn_pct', 'fat_carbo', 'Year', 'Province']].values
-        y = df['label'].values  # 不再用 is_urban
-
-        # 分层抽样
-        self.X_train, self.X_test, self.y_train, self.y_test, train_idx, test_idx = train_test_split(
-            X, y, range(len(X)), test_size=0.2, random_state=42, stratify=y
-        )
-
-        # 保存Year和Province用于后续分析
-        self.year_train = df.iloc[train_idx]['Year'].values
-        self.year_test = df.iloc[test_idx]['Year'].values
-        self.province_train = df.iloc[train_idx]['Province'].values
-        self.province_test = df.iloc[test_idx]['Province'].values
-
-        # 标准化（Province_Code也参与标准化，或者单独处理）
-        self.X_train = self.scaler.fit_transform(self.X_train)
-        self.X_test = self.scaler.transform(self.X_test)
-        joblib.dump(self.scaler, f"{MODEL_SAVE_DIR}/scaler.pkl")
-
-        print(f"✅ 数据加载完成 | 训练集: {len(self.X_train)} | 测试集: {len(self.X_test)}")
-        print(f"   Year范围: {self.year_test.min()}-{self.year_test.max()}")
-        print(f"   省份数: {len(np.unique(self.province_test))}")
-        # ===================== Statistics of class counts by province =====================
-        print("\n" + "=" * 60)
-        print("📊 Dataset Class Statistics (0=Rural, 1=Urban/Rural, 2=Urban)")
-        print("=" * 60)
-
-        # Overall count
-        total_counts = df['label'].value_counts().sort_index()
-        print("Overall class counts:")
-        print(f"  Rural (0)          : {total_counts.get(0, 0)}")
-        print(f"  Urban/Rural (1)    : {total_counts.get(1, 0)}")
-        print(f"  Urban (2)          : {total_counts.get(2, 0)}")
-        print(f"  Total              : {len(df)}")
-
-        # By province
-        print("\nClass distribution by province:")
-        prov_counts = df.groupby('Province')['label'].value_counts().unstack(fill_value=0)
-        for code in sorted(prov_counts.index):
-            prov_name = PROVINCE_SHORT.get(code, f"Province{code}")
-            rural = prov_counts.loc[code, 0] if 0 in prov_counts.columns else 0
-            mixed = prov_counts.loc[code, 1] if 1 in prov_counts.columns else 0
-            urban = prov_counts.loc[code, 2] if 2 in prov_counts.columns else 0
-            print(f"  {prov_name:12s} | Rural:{rural:4d}  Urban/Rural:{mixed:4d}  Urban:{urban:4d}")
-
-        print("=" * 60)
-        return self
-
-
-# ===================== ML Models =====================
+from data_pipeline import DataPipeline, PROVINCE_SHORT
+from features import FEATURE_COLS
 class MLModels:
     def __init__(self, X_train, X_test, y_train, y_test, result_path=RESULT_PATH):
         self.X_train = X_train
@@ -224,22 +123,19 @@ class MLModels:
             return self
         print("[2/4] 训练 FINAL BUSTER XGBoost（AUC+F1 双封顶）...")
 
-        n_neg = (self.y_train == 0).sum()
-        n_pos = (self.y_train == 1).sum()
-
         model = XGBClassifier(
             n_estimators=600,
             max_depth=4,
             learning_rate=0.05,
             subsample=0.9,
             colsample_bytree=0.9,
-            scale_pos_weight=np.sqrt(n_neg / n_pos),  # 温和平衡
-            min_child_weight=5,  # 医学数据神参数
+            min_child_weight=5,
             gamma=0.2,
             reg_alpha=0.5,
             reg_lambda=1.2,
-            eval_metric="logloss",
-            objective="binary:logistic",
+            eval_metric="mlogloss",
+            objective="multi:softprob",
+            num_class=3,
             random_state=42,
             n_jobs=1,
         )
@@ -278,10 +174,10 @@ class MLModels:
 
 
 class MLP(nn.Module):
-    def __init__(self):
+    def __init__(self, n_features=6):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(6, 64),
+            nn.Linear(n_features, 64),
             nn.ReLU(),
             nn.Dropout(0.3),
             nn.Linear(64, 32),
@@ -295,11 +191,12 @@ class MLP(nn.Module):
 
 
 class TorchTrainer:
-    def __init__(self, X_train, X_test, y_train, y_test):
+    def __init__(self, X_train, X_test, y_train, y_test, n_features=6):
         self.X_train = X_train
         self.X_test = X_test
         self.y_train = y_train
         self.y_test = y_test
+        self.n_features = n_features
         self.model = None
         self.device = torch.device("cpu")
         self.model_path = f"{MODEL_SAVE_DIR}/PyTorch_MLP.pth"
@@ -308,7 +205,7 @@ class TorchTrainer:
     def load_model(self):
         if not os.path.exists(self.model_path):
             return False
-        self.model = MLP().to(self.device)
+        self.model = MLP(self.n_features).to(self.device)
         try:
             self.model.load_state_dict(torch.load(self.model_path, map_location=self.device))
             return self._evaluate()
@@ -323,7 +220,7 @@ class TorchTrainer:
             return load_res, self.model
 
         print(f"\n[3/4] 训练 PyTorch MLP 3分类 | {epochs}轮 | batch={batch_size}")
-        self.model = MLP().to(self.device)
+        self.model = MLP(self.n_features).to(self.device)
         loss_fn = nn.CrossEntropyLoss()
         opt = optim.Adam(self.model.parameters(), lr=1e-3)
 
@@ -400,7 +297,8 @@ class Trainer:
         ml.logistic_regression().random_forest().xgboost().balanced_xgboost()
 
         torch_res, torch_model = TorchTrainer(
-            data.X_train, data.X_test, data.y_train, data.y_test
+            data.X_train, data.X_test, data.y_train, data.y_test,
+            n_features=data.X_train.shape[1],
         ).train()
         ml.results["PyTorch_MLP"] = torch_res
 

@@ -1,17 +1,16 @@
-# A Data-Driven Framework to Infer Urban–Rural Context from Dietary Patterns
+# Inferring Missing Urban–Rural Contextual Labels from Dietary Surveys (Plan B)
 
 ---
 
 ## Overview
 
-This repository developed a supervised machine learning framework based on gradient-boosted decision trees to infer a three-category urban–rural classification. Model performance was evaluated using cross-validation, leave-one-year-out validation, and simulated missingness scenarios (10–70%). Calibration and the impact on downstream epidemiological analyses were also assessed.
+This repository implements a gradient-boosted inference framework for recovering missing **administrative** urban–rural labels (CHNS T2) from macronutrient composition and spatiotemporal covariates. The outcome combines T2 with a transitional dietary stratum (FatER 23–30%). Evaluation uses simulated label missingness (10–70%), leave-one-year-out validation, comparator imputation, calibration, and downstream effect preservation.
 
-### Key Achievements
+### Key results (held-out test / 30% masked labels)
 
-- **High-performance classification**: XGBoost achieves **0.782 accuracy** and **0.915 AUC** on three-class dietary pattern recognition
-- **Multi-model ensemble**: Logistic Regression, Random Forest, XGBoost, Balanced XGBoost, and Multi-Layer Perceptron
-- **SHAP-based interpretability**: Global feature importance, local explanations, temporal/spatial stratification
-- **Industrial-grade pipeline**: Scalable preprocessing, reproducible results, production-ready model serialization
+- **Balanced XGBoost**: accuracy **0.782–0.786**, macro-F1 **~0.770**
+- **Leave-one-year-out**: mean accuracy **0.776** (SD 0.019)
+- **Feature set**: FatER, CarbER, ProtER, fat/carb ratio, survey year, province
 
 ---
 

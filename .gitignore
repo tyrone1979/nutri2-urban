@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.idea/
+
+# Word backups and extraction artifacts
+*.docx.bak
+~$*.docx
+public/*_extract.txt
+public/main_structure.json
+
+# Local scratch figures at repo root
+fig_*.tiff
+
+# OS
+Thumbs.db
+.DS_Store

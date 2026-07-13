@@ -12,6 +12,9 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
+from data_pipeline import engineer_columns
+from features import FEATURE_COLS
+
 
 def run_spatial_validation():
     print("=" * 70)
@@ -24,27 +27,13 @@ def run_spatial_validation():
     df.columns = df.columns.str.upper()
     df = df[['T2', 'T1', 'WAVE', 'D3KCAL', 'D3CARBO', 'D3FAT', 'D3PROTN']].dropna()
     df = df[(df.D3KCAL > 500) & (df.D3KCAL < 5000)]
+    df = engineer_columns(df)
 
-    # 特征工程
-    df['fat_energy_ratio'] = df.D3FAT * 9 / df.D3KCAL
-    df['carbo_energy_ratio'] = df.D3CARBO * 4 / df.D3KCAL
-    df['protn_energy_ratio'] = df.D3PROTN * 4 / df.D3KCAL
-    df['fat_carbo_ratio'] = df.D3FAT / (df.D3CARBO + 1e-6)
-    df['Year'] = df['WAVE'].astype(int)
-    df['Province'] = df['T1'].astype(int)
-
-    # 3分类标签
-    df['label'] = 0
-    df.loc[df['T2'] == 1, 'label'] = 2
-    df.loc[(df['fat_energy_ratio'] >= 0.23) & (df['fat_energy_ratio'] <= 0.30), 'label'] = 1
-
-    # 选择样本量足够的省份
     province_counts = df['Province'].value_counts()
     major_provinces = province_counts[province_counts >= 500].index.tolist()
 
     results = []
-    feature_cols = ['fat_energy_ratio', 'carbo_energy_ratio', 'protn_energy_ratio',
-                    'fat_carbo_ratio', 'Year', 'Province']
+    feature_cols = FEATURE_COLS
 
     print(f"\n📊 参与验证的省份: {len(major_provinces)} 个")
 
