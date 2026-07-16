@@ -88,8 +88,8 @@ class DataPipeline:
         joblib.dump(self.scaler, f"{MODEL_SAVE_DIR}/scaler.pkl")
 
         if verbose:
-            print(f"✅ 数据加载完成 | 训练集: {len(self.X_train)} | 测试集: {len(self.X_test)}", flush=True)
-            print(f"   特征: {self.feature_names}", flush=True)
+            print(f"Data loaded | train: {len(self.X_train)} | test: {len(self.X_test)}", flush=True)
+            print(f"   Features: {self.feature_names}", flush=True)
             total = df["label"].value_counts().sort_index()
             print(f"   Rural/Trans/Urban: {total.get(0,0)}/{total.get(1,0)}/{total.get(2,0)}", flush=True)
         return self

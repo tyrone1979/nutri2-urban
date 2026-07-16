@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Re-run entire pipeline for Plan B (T2 3-class outcome, 6-feature predictors)."""
+"""Re-run pipeline for Plan B (T2 admin labels + transitional overlay; non-circular primary task)."""
 import glob
 import os
 import subprocess
@@ -11,8 +11,9 @@ os.chdir(ROOT)
 
 def run_script(script_name: str) -> None:
     path = os.path.join(ROOT, script_name)
-    print(f"\n{'=' * 60}\n>>> {script_name}\n{'=' * 60}")
-    result = subprocess.run([sys.executable, "-u", path], cwd=ROOT, env={**os.environ, "PYTHONUNBUFFERED": "1"})
+    print(f"\n{'=' * 60}\n>>> {script_name}\n{'=' * 60}", flush=True)
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
+    result = subprocess.run([sys.executable, "-u", path], cwd=ROOT, env=env)
     if result.returncode != 0:
         raise SystemExit(f"FAILED: {script_name} (exit {result.returncode})")
 
@@ -23,11 +24,11 @@ def wipe_models() -> None:
         os.remove(pkl)
     for pth in glob.glob("saved_models/*.pth"):
         os.remove(pth)
-    print("Cleared saved_models/*.pkl and *.pth")
+    print("Cleared saved_models", flush=True)
 
 
 def run_main(force_retrain: bool = True) -> None:
-    print(f"\n{'=' * 60}\n>>> main.py (force_retrain={force_retrain})\n{'=' * 60}")
+    print(f"\n{'=' * 60}\n>>> main.py (force_retrain={force_retrain})\n{'=' * 60}", flush=True)
     code = (
         "import multiprocessing\n"
         "try:\n"
@@ -37,7 +38,8 @@ def run_main(force_retrain: bool = True) -> None:
         "from main import Trainer\n"
         f"Trainer().run(force_retrain={force_retrain})\n"
     )
-    result = subprocess.run([sys.executable, "-c", code], cwd=ROOT)
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
+    result = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=env)
     if result.returncode != 0:
         raise SystemExit(f"FAILED: main.py (exit {result.returncode})")
 
@@ -69,4 +71,4 @@ if __name__ == "__main__":
             run_main(force_retrain=True)
         else:
             run_script(step)
-    print("\nAll experiments complete. Update docx tables from results/*.csv")
+    print("\nAll Plan B experiments complete.", flush=True)

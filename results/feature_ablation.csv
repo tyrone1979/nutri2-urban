@@ -1,4 +1,5 @@
 Feature_Set,N_Features,Features,Accuracy,Macro_F1,Kappa
+full,6,"fat_pct, carbo_pct, protn_pct, fat_carbo, Year, Province",0.7824,0.7698,0.6355
+no_fater,5,"carbo_pct, protn_pct, fat_carbo, Year, Province",0.7773,0.7635,0.6278
 nutrients_only,4,"fat_pct, carbo_pct, protn_pct, fat_carbo",0.7687,0.7507,0.6102
 spatiotemporal_only,2,"Year, Province",0.5179,0.2576,0.0244
-full,6,"fat_pct, carbo_pct, protn_pct, fat_carbo, Year, Province",0.7824,0.7698,0.6355

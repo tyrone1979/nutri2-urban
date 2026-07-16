@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Binary T2 Rural vs Urban (exclude transitional stratum) under 30% masked labels."""
+"""Binary Rural vs Urban (exclude transitional FatER stratum) under 30% masked labels."""
 import os
 
 import numpy as np

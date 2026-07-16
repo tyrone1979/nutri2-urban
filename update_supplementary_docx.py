@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Update Supplementary Material.docx for Plan B."""
+"""Update Supplementary Material.docx for Plan B (T2 + transitional overlay)."""
 import shutil
 from pathlib import Path
 
@@ -51,20 +51,27 @@ def main():
     set_cell_text(t3.rows[13].cells[2], f"{mean_acc:.3f} ± {sd_acc:.3f}")
     set_cell_text(t3.rows[13].cells[3], f"{mean_f1:.3f} ± {sd_f1:.3f}")
 
-    # Table 4 = feature ablation (rewrite structure)
+    # Table 4 = feature ablation (include no-FatER circularity check)
     t4 = doc.tables[3]
     rows = [
         ("Full (6 features)", "full"),
+        ("No FatER (5 features)", "no_fater"),
         ("Macronutrients only (4 features)", "nutrients_only"),
         ("Year + Province only (2 features)", "spatiotemporal_only"),
     ]
+    # Ensure enough rows
+    while len(t4.rows) < len(rows) + 1:
+        t4.add_row()
     for i, (label, key) in enumerate(rows, start=1):
+        if key not in ablation["Feature_Set"].values:
+            continue
         row = ablation.loc[ablation["Feature_Set"] == key].iloc[0]
         set_cell_text(t4.rows[i].cells[0], label)
         set_cell_text(t4.rows[i].cells[1], f"{row['Accuracy']:.4f}")
         set_cell_text(t4.rows[i].cells[2], f"{row['Macro_F1']:.4f}")
         set_cell_text(t4.rows[i].cells[3], f"{row['Kappa']:.4f}")
-        set_cell_text(t4.rows[i].cells[4], "—")
+        if len(t4.rows[i].cells) > 4:
+            set_cell_text(t4.rows[i].cells[4], "—")
 
     # Table 5 = missing rate class acc
     t5 = doc.tables[4]
@@ -100,18 +107,16 @@ def main():
 
     s4_text = (
         "Supplementary Table S4. Feature-set ablation under Plan B (T2 administrative labels with transitional "
-        "FatER overlay). Macronutrients and spatiotemporal covariates contributed jointly; year and province alone "
-        "performed near chance for three-class inference."
+        "FatER overlay). Excluding FatER modestly reduced accuracy; year and province alone performed near chance."
     )
     s5_text = (
-        "Supplementary Table S5. Missing rate sensitivity: category-specific accuracy. Transitional accuracy "
-        "remained high across missing rates because this stratum is partially defined by FatER thresholds; Urban "
-        "accuracy remained near 0.42–0.43, reflecting difficult administrative-urban inference."
+        "Supplementary Table S5. Category-specific accuracy across missing rates (30%–70%) under the three-class "
+        "descriptive framework. High Transitional accuracy reflects partial definitional overlap; Urban accuracy "
+        "remained the most challenging stratum."
     )
     s3_text = (
         "Supplementary Table S3. Leave-one-province-out spatial validation. Mean accuracy "
-        f"{mean_acc:.3f} (SD {sd_acc:.3f}). Lower performance in Beijing, Shanghai, and Chongqing reflects "
-        "smaller test samples and distinct urban dietary profiles."
+        f"{mean_acc:.3f} (SD {sd_acc:.3f})."
     )
 
     for p in doc.paragraphs:

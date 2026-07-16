@@ -51,11 +51,12 @@ def main():
         rows.append({
             "trans_low": low,
             "trans_high": high,
-            "accuracy": accuracy_score(y_true, y_pred),
-            "macro_f1": f1_score(y_true, y_pred, average="macro"),
-            "kappa": cohen_kappa_score(y_true, y_pred),
-            "transitional_prev": (y_true == 1).mean(),
+            "accuracy": round(accuracy_score(y_true, y_pred), 4),
+            "macro_f1": round(f1_score(y_true, y_pred, average="macro"), 4),
+            "kappa": round(cohen_kappa_score(y_true, y_pred), 4),
+            "transitional_prev": round(float((y_true == 1).mean()), 4),
         })
+        print(f"  [{low:.2f}, {high:.2f}] acc={rows[-1]['accuracy']:.4f}")
 
     pd.DataFrame(rows).to_csv("./results/threshold_sensitivity.csv", index=False)
     print(pd.DataFrame(rows).to_string(index=False))

@@ -63,6 +63,15 @@ def fmt4(x):
     return f"{x:.4f}"
 
 
+def fmt_js(x):
+    x = float(x)
+    if x == 0:
+        return "0.000"
+    if x < 0.001:
+        return f"{x:.5f}"
+    return f"{x:.3f}"
+
+
 def load_analytic_df():
     df, _ = pyreadstat.read_sas7bdat(str(ROOT / "data" / "c12diet.sas7bdat"))
     df.columns = df.columns.str.upper()
@@ -141,6 +150,35 @@ def main():
     rural_pct = 100 * c0 / n_total
     trans_pct = 100 * c1 / n_total
     urban_pct = 100 * c2 / n_total
+    urban_1991 = 100 * (df.loc[df["Year"] == 1991, "label"] == 2).mean()
+    urban_2011 = 100 * (df.loc[df["Year"] == 2011, "label"] == 2).mean()
+
+    miss_sim = pd.read_csv(ROOT / "results/missingness_simulation.csv")
+    mcar_prop = miss_sim.loc[(miss_sim["Scenario"] == "MCAR") & (miss_sim["Method"] == "Proposed"), "Accuracy"].iloc[0]
+    mar_prop = miss_sim.loc[(miss_sim["Scenario"] == "MAR (FatER)") & (miss_sim["Method"] == "Proposed"), "Accuracy"].iloc[0]
+
+    mar_para = (
+        "Primary evaluations masked contextual labels completely at random (MCAR) among observations with known "
+        "labels in the held-out test set. Supplementary analyses simulated MAR missingness (probability of missingness "
+        "increasing with fat energy ratio) and spatially structured missingness. Under MAR, proposed accuracy was "
+        f"{mar_prop:.3f} compared with {mcar_prop:.3f} under MCAR, indicating modest sensitivity to departures from "
+        "MCAR. Results should be interpreted conditional on the assumption that dietary features remain observed when "
+        "contextual labels are missing."
+    )
+
+    majority_acc = float(baseline.loc[baseline["Method"] == "Majority", "Accuracy"].iloc[0])
+    lda_acc = float(baseline.loc[baseline["Method"] == "LDA", "Accuracy"].iloc[0])
+
+    discussion_baselines = (
+        f"Majority imputation provided a lower bound (accuracy {majority_acc:.3f} at 30% missingness). "
+        f"KNN achieved {knn_acc:.3f}; corrected multinomial-logistic MICE {mice_acc:.3f}; LDA {lda_acc:.3f}; "
+        f"and RF-imputation {rf_acc:.3f}. The proposed framework ({prop_acc:.3f}) showed incremental gains over "
+        "the strongest comparator. A key differentiator is the evaluation suite reporting Jensen–Shannon divergence, "
+        "calibration, LOYO generalisability, threshold sensitivity, and downstream Cohen's d preservation—not "
+        "accuracy alone."
+    )
+    trans_pct = 100 * c1 / n_total
+    urban_pct = 100 * c2 / n_total
 
     urban_1991 = 100 * (df.loc[df["Year"] == 1991, "label"] == 2).mean()
     urban_2011 = 100 * (df.loc[df["Year"] == 2011, "label"] == 2).mean()
@@ -175,10 +213,14 @@ def main():
     t3 = doc.tables[2]
     mapping = {
         "Majority category": "Majority",
+        "Majority": "Majority",
         "MICE": "MICE",
         "KNN (k = 5)": "KNN (k=5)",
+        "KNN (k=5)": "KNN (k=5)",
+        "LDA": "LDA",
         "RF-Imputer": "RF-Imputer",
         "Proposed framework": "Proposed (BXGB)",
+        "Proposed (BXGB)": "Proposed (BXGB)",
     }
     for r in range(1, len(t3.rows)):
         label = t3.rows[r].cells[0].text.strip()
@@ -189,7 +231,7 @@ def main():
         set_cell_text(t3.rows[r].cells[1], fmt3(row["Accuracy"]))
         set_cell_text(t3.rows[r].cells[2], fmt3(row["Macro_F1"]))
         set_cell_text(t3.rows[r].cells[3], fmt3(row["Kappa"]))
-        set_cell_text(t3.rows[r].cells[4], fmt3(row["JS_Div"]))
+        set_cell_text(t3.rows[r].cells[4], fmt_js(row["JS_Div"]))
 
     t4 = doc.tables[3]
     for r in range(1, len(t4.rows)):
@@ -211,8 +253,9 @@ def main():
             continue
         rate = int(rate_txt) / 100
         row = dist.loc[dist["missing_rate"] == rate].iloc[0]
-        set_cell_text(t5.rows[r].cells[1], fmt3(row["JS_Div"]))
-        set_cell_text(t5.rows[r].cells[2], f"{100 * row['Max_Class_Diff']:.1f}")
+        set_cell_text(t5.rows[r].cells[1], fmt_js(row["JS_Div"]))
+        max_pct = 100 * float(row["Max_Class_Diff"])
+        set_cell_text(t5.rows[r].cells[2], f"{max_pct:.2f}" if max_pct >= 0.01 else f"{max_pct:.3f}")
         set_cell_text(t5.rows[r].cells[3], "< 5")
 
     t6 = doc.tables[5]
@@ -316,12 +359,14 @@ def main():
 
     intro_final = (
         "The present study addresses this gap by proposing a reproducible statistical evaluation protocol "
-        "for assessing contextual label inference methods, using CHNS as an illustrative testbed. Rather than "
-        "claiming optimal prediction, we establish a multi-dimensional validation framework that includes: "
-        "(i) simulated missingness at varying rates; (ii) leave-one-year-out temporal generalisability; "
-        "(iii) distributional fidelity via Jensen–Shannon divergence; (iv) probabilistic calibration assessment; "
-        "and (v) downstream effect preservation. This protocol provides a template for future studies evaluating "
-        "label-imputation methods when ground-truth contextual variables are available."
+        "for assessing contextual label inference methods, using CHNS as an illustrative testbed. This manuscript "
+        "extends our prior conference work on inferring urban–rural context from dietary patterns by reframing the "
+        "contribution for Statistics in Medicine: the focus is a transparent missing-label evaluation protocol "
+        "(simulated missingness, temporal holdout, comparators, calibration, downstream preservation) rather than "
+        "a standalone prediction benchmark. Rather than claiming optimal prediction, we establish a multi-dimensional "
+        "validation framework that includes: (i) simulated missingness at varying rates; (ii) leave-one-year-out "
+        "temporal generalisability; (iii) distributional fidelity via Jensen–Shannon divergence; "
+        "(iv) probabilistic calibration assessment; and (v) downstream effect preservation."
     )
 
     output_line = (
@@ -401,10 +446,12 @@ def main():
         "as missingness increased (Figure 2)."
     )
 
+    js70 = float(dist.loc[dist["missing_rate"] == 0.7, "JS_Div"].iloc[0])
+    max50 = 100 * float(dist.loc[dist["missing_rate"] == 0.5, "Max_Class_Diff"].iloc[0])
     distrib_para = (
         "Distributional agreement between observed and inferred category proportions was acceptable. Jensen–Shannon "
-        "divergence remained below 0.052 at 70% missingness, and maximum category proportion deviation was "
-        "4.3% at 50% missingness (Table 5)."
+        f"divergence remained below {fmt_js(js70)} at 70% missingness, and maximum category proportion deviation was "
+        f"{max50:.2f}% at 50% missingness (Table 5)."
     )
 
     loyo_para = (
@@ -508,6 +555,15 @@ def main():
         "of sample size, and structured comparison of imputation strategies rather than direct policy classification."
     )
 
+    framework_overview = (
+        "The proposed framework recovers missing contextual labels from dietary and spatiotemporal predictors "
+        "and evaluates them under a multi-dimensional statistical protocol (Figure 1). Stages include: data "
+        "preparation and quality control; dietary pattern representation; predictive modelling "
+        "(primary binary T2 Rural/Urban, with three-class descriptive stratification); and evaluation under "
+        "simulated label missingness, temporal holdout, distributional fidelity, calibration, comparator "
+        "methods, and downstream effect preservation."
+    )
+
     for p in doc.paragraphs:
         if has_equation(p._element):
             continue
@@ -515,6 +571,10 @@ def main():
 
         if txt.strip().startswith("A Data-Driven Framework") or txt.strip().startswith("A Gradient-Boosted"):
             replace_paragraph_if_plain(p, title)
+            continue
+
+        if "infers urban–rural context from dietary patterns through four sequential stages" in txt:
+            replace_paragraph_if_plain(p, framework_overview)
             continue
 
         updates = [
@@ -533,6 +593,16 @@ def main():
             ("The analytic sample comprised 101,926", sample_para),
             ("Under the primary evaluation scenario (30% simulated missingness), the proposed framework achieved an accuracy of 0.785", inference_para),
             ("Under the primary evaluation scenario (30% simulated missingness), the proposed framework achieved an accuracy", inference_para),
+            ("Under 30% simulated missingness, the proposed framework achieved accuracy 0.999", inference_para),
+            ("Category-specific accuracy under 30% simulated missingness was 0.998", category_para),
+            ("Proposed accuracy ranged from 0.999", missing_para),
+            ("mean accuracy of 0.998", loyo_para),
+            ("mean accuracy 0.998", supp_para),
+            ("accuracy 0.999 and macro-F1 0.999", principal_findings),
+            ("In this methodological evaluation, the gradient-boosted inference framework achieved accuracy 0.999", principal_findings),
+            ("Primary evaluations masked contextual labels completely at random (MCAR)", mar_para),
+            ("Majority imputation provided a lower bound (accuracy 0.408", discussion_baselines),
+            ("Majority imputation provided a lower bound (accuracy 0.516", discussion_baselines),
             ("The strongest comparator, random forest imputation", comparator_para),
             ("The absolute performance gain over the strongest baseline was modest", gain_para),
             ("Category-specific performance showed high accuracy for Rural", category_para),

@@ -49,10 +49,10 @@ def eval_split(name, cols):
 
 def main():
     print("=" * 70)
-    print("Feature-set ablation (Plan B: T2 labels, 4 macros + Year + Province)")
+    print("Feature-set ablation (Plan B: T2 + transitional overlay labels)")
     print("=" * 70)
     rows = []
-    for key in ("nutrients_only", "spatiotemporal_only", "full"):
+    for key in ("full", "no_fater", "nutrients_only", "spatiotemporal_only"):
         spec = FEATURE_SETS[key]
         row = eval_split(key, spec["cols"])
         rows.append(row)

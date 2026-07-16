@@ -1,4 +1,4 @@
-"""Feature definitions for Plan B: T2-based 3-class outcome, full macronutrient + spatiotemporal predictors."""
+"""Feature definitions for Plan B: T2-based outcome; macronutrient + spatiotemporal predictors."""
 from labels import assign_context_labels, assign_t2_three_class_labels
 
 NUTRIENT_COLS = ["fat_pct", "carbo_pct", "protn_pct", "fat_carbo"]
@@ -18,6 +18,20 @@ NUTRIENT_ALL_COLS = NUTRIENT_COLS
 NUTRIENT_ALL_NAMES = ["FatER", "CarbER", "ProtER", "Fat/Carb"]
 
 FEATURE_SETS = {
+    "full": {
+        "cols": FEATURE_COLS,
+        "names": FEATURE_NAMES,
+    },
+    "no_fater": {
+        "cols": ["carbo_pct", "protn_pct", "fat_carbo", "Year", "Province"],
+        "names": [
+            "carbo_energy_ratio",
+            "protn_energy_ratio",
+            "fat_carbo_ratio",
+            "Year",
+            "Province",
+        ],
+    },
     "nutrients_only": {
         "cols": NUTRIENT_COLS,
         "names": FEATURE_NAMES[:4],
@@ -25,10 +39,6 @@ FEATURE_SETS = {
     "spatiotemporal_only": {
         "cols": SPATIOTEMPORAL_COLS,
         "names": ["Year", "Province"],
-    },
-    "full": {
-        "cols": FEATURE_COLS,
-        "names": FEATURE_NAMES,
     },
 }
 

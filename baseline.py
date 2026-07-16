@@ -9,6 +9,7 @@ from sklearn.metrics import accuracy_score, f1_score, cohen_kappa_score
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler
 from collections import Counter
 from scipy.spatial.distance import jensenshannon
@@ -119,14 +120,21 @@ def run_enhanced_baseline_comparison(missing_rate=0.3, random_state=42):
     y_imp_knn[mask] = knn.predict(X_test[mask])
 
     # ========== 3. MICE-style iterative imputation (multinomial logistic for categorical y) ==========
-    print("   运行 MICE (multinomial logistic for labels)...")
+    print("   Running MICE (multinomial logistic for labels)...")
     y_imp_mice = mice_impute_labels(X_test, y_masked, mask, random_state=random_state)
 
-    # ========== 4. RandomForest Imputer (代替 MissForest) ==========
-    print("   运行 RandomForest Imputer...")
+    # ========== 4. LDA imputation baseline ==========
+    print("   Running LDA imputation...")
+    y_imp_lda = y_masked.copy()
+    lda = LinearDiscriminantAnalysis()
+    lda.fit(X_test[~mask], y_test[~mask])
+    y_imp_lda[mask] = lda.predict(X_test[mask])
+
+    # ========== 5. RandomForest Imputer ==========
+    print("   Running RandomForest Imputer...")
     y_imp_rf = rf_impute(X_test, y_masked, mask, random_state=random_state)
 
-    # ========== 5. Proposed ==========
+    # ========== 6. Proposed ==========
     y_proba = model.predict_proba(X_test)
     y_imp_proposed = y_masked.copy()
     y_imp_proposed[mask] = np.argmax(y_proba[mask], axis=1)
@@ -136,6 +144,7 @@ def run_enhanced_baseline_comparison(missing_rate=0.3, random_state=42):
         'Majority': y_imp_majority,
         'KNN (k=5)': y_imp_knn,
         'MICE': y_imp_mice,
+        'LDA': y_imp_lda,
         'RF-Imputer': y_imp_rf,
         'Proposed (BXGB)': y_imp_proposed
     }

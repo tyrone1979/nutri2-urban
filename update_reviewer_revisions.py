@@ -106,10 +106,16 @@ def replace_heading(doc, old: str, new: str) -> None:
             return
 
 
+def paragraph_has_drawing(paragraph) -> bool:
+    return bool(paragraph._element.findall(
+        ".//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing"
+    ))
+
+
 def remove_empty_paragraphs(doc) -> None:
     to_remove = []
     for p in doc.paragraphs:
-        if not p.text.strip() and not has_equation(p._element):
+        if not p.text.strip() and not has_equation(p._element) and not paragraph_has_drawing(p):
             to_remove.append(p)
     for p in to_remove:
         p._element.getparent().remove(p._element)
@@ -266,12 +272,14 @@ def apply_main(m):
 
     intro_final = (
         "The present study addresses this gap by proposing a reproducible statistical evaluation protocol "
-        "for assessing contextual label inference methods, using CHNS as an illustrative testbed. Rather than "
-        "claiming optimal prediction, we establish a multi-dimensional validation framework that includes: "
-        "(i) simulated missingness at varying rates; (ii) leave-one-year-out temporal generalisability; "
-        "(iii) distributional fidelity via Jensen–Shannon divergence; (iv) probabilistic calibration assessment; "
-        "and (v) downstream effect preservation. This protocol provides a template for future studies evaluating "
-        "label-imputation methods when ground-truth contextual variables are available."
+        "for assessing contextual label inference methods, using CHNS as an illustrative testbed. This manuscript "
+        "extends our prior conference work on inferring urban–rural context from dietary patterns by reframing the "
+        "contribution for Statistics in Medicine: the focus is a transparent missing-label evaluation protocol "
+        "(simulated missingness, temporal holdout, comparators, calibration, downstream preservation) rather than "
+        "a standalone prediction benchmark. Rather than claiming optimal prediction, we establish a multi-dimensional "
+        "validation framework that includes: (i) simulated missingness at varying rates; (ii) leave-one-year-out "
+        "temporal generalisability; (iii) distributional fidelity via Jensen–Shannon divergence; "
+        "(iv) probabilistic calibration assessment; and (v) downstream effect preservation."
     )
 
     mice_methods = (
@@ -460,6 +468,13 @@ def apply_main(m):
             if prefix in p.text:
                 replace_para(p, new)
                 break
+
+    if not any("extends our prior conference work" in p.text for p in doc.paragraphs):
+        insert_before(
+            doc,
+            "We propose a gradient-boosted inference framework",
+            intro_final,
+        )
 
     if not any("For the primary binary inferential task, we additionally trained" in p.text for p in doc.paragraphs):
         insert_before(doc, "Baseline Methods for Comparison", binary_methods)

@@ -102,8 +102,8 @@ def bootstrap_imputation_evaluation(data, model, scaler, n_boot=200, missing_rat
         acc_k = accuracy_score(y_boot[mask_eval], y_imp_knn[mask_eval])
         f1_k = f1_score(y_boot[mask_eval], y_imp_knn[mask_eval], average='macro')
 
-        true_eff = compute_effect_size(X_orig_boot, y_boot, feature_idx=idx)
-        imp_eff = compute_effect_size(X_orig_boot, y_imp_proposed, feature_idx=idx)
+        true_eff = compute_effect_size(X_orig_boot, y_boot, feature_idx=0)
+        imp_eff = compute_effect_size(X_orig_boot, y_imp_proposed, feature_idx=0)
         bias = imp_eff - true_eff
         bias_pct = abs(bias) / abs(true_eff) * 100 if true_eff != 0 else 0
 
