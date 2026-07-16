@@ -62,6 +62,9 @@ STEPS = [
     ("shap_analysis.py", None),
     ("threshold_sensitivity.py", None),
     ("downstream_adjusted_regression.py", None),
+    ("binary_noise_injection_sensitivity.py", None),
+    ("mar_beta_sensitivity.py", None),
+    ("hyperparameter_perturbation.py", None),
 ]
 
 

@@ -1,31 +1,31 @@
-# Response to SiM Major/Minor Revisions
+# Response to SiM Major Revision (second round)
 
-## Major 1 — Elevating methodological contribution
-- Reframed Introduction around **three protocol pillars**: (1) simulated missingness internal validation; (2) separating predictive accuracy from downstream inferential preservation; (3) spatiotemporal generalisability.
-- Added a **Protocol application guide** in the Discussion for reuse on other surveys.
-- Contribution positioned as a reusable evaluation blueprint, with CHNS as the illustrative testbed (not as an XGBoost methods paper).
+## Concern 1 — Binary-task selection bias
+- Added explicit discussion of excluding the FatER overlap stratum.
+- New sensitivity (Supplementary Table S11): primary exclude Transitional masked acc=0.728;
+  collapse-by-T2=0.721; random 50/50=0.667.
+- Script: `binary_noise_injection_sensitivity.py`.
 
-## Major 2 — Missingness mechanisms
-- New subsection **Missing Data Mechanisms and Simulation**.
-- **MCAR**: independent Bernoulli masking with π = 0.30 on the held-out test set.
-- **MAR**: logit{P(R=1|FatER)} = β₀ + β₁ z(FatER) with β₁ = 2.0, β₀ = -1.354, realised rate 0.300.
-- **Spatial**: observation-level rates 0.50 (Beijing/Shanghai/Chongqing) vs 0.20 otherwise (not province deletion).
-- Parameters saved in `results/missingness_mechanism_params.csv`; scripts: `missingness_simulation.py`.
+## Concern 2 — Three-class presentation
+- Abstract now leads with binary 0.716; three-class 0.786 marked descriptive.
+- Wording upgraded to **substantially definitional**; Table 3/4 captions footnoted.
 
-## Major 3 — Metric rationale
-- Calibration: framed as enabling **IPW / multiple imputation** reuse of class probabilities, not only fit diagnostics.
-- JS divergence: stated as **necessary but not sufficient** (margins ≠ joints); temporal/spatial/downstream checks retained.
+## Concern 3 — MAR β₁ choice
+- Sensitivity β₁∈{1.0,1.5,2.0,2.5} (Supplementary Table S12): accuracy 0.701–0.741.
+- Script: `mar_beta_sensitivity.py`.
 
-## Major 4 — Downstream adjusted analysis
-- New analysis: OLS of macronutrients on Urban vs Rural, adjusting for **Year + Province** (age/sex unavailable in diet extract).
-- FatER Urban coefficient: true 0.0697 (SE 0.0020) vs imputed 0.0869 (SE 0.0020); relative change 24.6% (Supplementary Table S10).
-- Script: `downstream_adjusted_regression.py`.
+## Concern 4 — Adjusted downstream
+- Methods now pre-disclose age/sex unavailable; S10 Year+Province adjustment highlighted in Discussion as limited but available adjustment set.
+- Unadjusted Table 8 retained as descriptive; adjusted FatER Δcoef≈25%.
 
-## Major 5 — Table S9 fragility → primary binary task
-- Results now highlight accuracy drop from 0.782 ([0.23,0.30]) to 0.679 ([0.25,0.32]).
-- Discussed as evidence that predictor-defined hard thresholds make multi-class accuracy unstable; binary T2 task remains primary (accuracy 0.716).
+## Concern 5 — Hyperparameter sensitivity
+- ± neighbourhood grid (Supplementary Table S13): SD=0.001; max |Δ|=0.29 pp.
+- Script: `hyperparameter_perturbation.py`.
+
+## Concern 6 — LOYO decline
+- Discussion now states decline from 0.795 (1993) to 0.740 (2011) and recommends retraining / time-adaptive weighting (Future Directions).
 
 ## Minor
-- Fig S1 caption expanded (colour scale; vertical jitter).
-- Terminology: label recovery phrased as **imputation/prediction**; “inference” reserved for parameter estimation / protocol pillars where appropriate.
-- GitHub (`tyrone1979/nutri2-urban`) includes scripts regenerating S9/S10 and mechanism parameters.
+- Spatial masking clarified as observation-level Bernoulli with province-specific rates.
+- Table 2 Rural FatER mean≈0.25 explained (admin rural with FatER>30% allowed).
+- Retraining moved/expanded under Future Directions.

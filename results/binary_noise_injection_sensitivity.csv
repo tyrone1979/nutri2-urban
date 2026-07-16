@@ -1,0 +1,4 @@
+n_test,n_masked,holdout_accuracy,holdout_f1,masked_accuracy,masked_f1,urban_share,scenario
+15790,4769,0.7216,0.5109,0.7276,0.5144,0.3381,primary_exclude_transitional
+20386,6137,0.7193,0.4762,0.7207,0.4871,0.3335,collapse_transitional_by_T2
+20386,6137,0.6709,0.4875,0.6669,0.4849,0.3746,collapse_transitional_random50
