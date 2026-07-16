@@ -61,6 +61,7 @@ STEPS = [
     ("paired_bootstrap_test.py", None),
     ("shap_analysis.py", None),
     ("threshold_sensitivity.py", None),
+    ("downstream_adjusted_regression.py", None),
 ]
 
 

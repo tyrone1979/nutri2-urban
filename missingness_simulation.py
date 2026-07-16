@@ -8,10 +8,11 @@ import pandas as pd
 import joblib
 from sklearn.metrics import accuracy_score, f1_score, cohen_kappa_score
 from sklearn.neighbors import KNeighborsClassifier
-from scipy.special import expit
+from scipy.special import expit, logit
 from scipy.spatial.distance import jensenshannon
 from collections import Counter
 import warnings
+import os
 
 warnings.filterwarnings('ignore')
 
@@ -22,31 +23,47 @@ def sigmoid(x):
     return expit(x)
 
 
-def simulate_mar_missing(y_test, X_original, feature_idx=0, alpha=5.0, base_rate=0.3):
+def simulate_mar_missing(y_test, X_original, feature_idx=0, beta1=2.0, base_rate=0.3, seed=42):
     """
-    MAR: 高 FatER 样本更容易缺失
+    MAR via logistic propensity:
+        logit(P(R=1 | FatER)) = β0 + β1 * z(FatER),
+    where z is standardised FatER and β0 is calibrated so E[P] ≈ base_rate.
+    Returns (mask, params_dict).
     """
-    fat_vals = X_original[:, feature_idx]
-    fat_centered = fat_vals - np.mean(fat_vals)
-    prob = sigmoid(alpha * fat_centered)
-    prob = prob * (base_rate / np.mean(prob))
-    prob = np.clip(prob, 0.01, 0.99)
-    mask = np.random.random(len(y_test)) < prob
-    return mask
+    rng = np.random.default_rng(seed)
+    fat = X_original[:, feature_idx]
+    z = (fat - fat.mean()) / fat.std(ddof=0)
+    beta0 = float(logit(base_rate))
+    for _ in range(40):
+        p = expit(beta0 + beta1 * z)
+        mean_p = float(p.mean())
+        if abs(mean_p - base_rate) < 1e-4:
+            break
+        beta0 += float(logit(base_rate) - logit(np.clip(mean_p, 1e-4, 1 - 1e-4)))
+    p = expit(beta0 + beta1 * z)
+    mask = rng.random(len(y_test)) < p
+    params = {
+        "beta0": beta0,
+        "beta1": beta1,
+        "realized_rate": float(mask.mean()),
+        "fat_mean": float(fat.mean()),
+        "fat_sd": float(fat.std(ddof=0)),
+    }
+    return mask, params
 
 
 def simulate_spatial_missing(y_test, province_codes, high_missing_provs=[11, 31, 55],
-                             high_rate=0.5, low_rate=0.2):
+                             high_rate=0.5, low_rate=0.2, seed=42):
     """
-    空间相关缺失：直辖市缺失率更高
-    11=Beijing, 31=Shanghai, 55=Chongqing
+    Spatially structured missingness (observation-level, province-specific rates):
+    Beijing/Shanghai/Chongqing masked at high_rate; other provinces at low_rate.
+    This is NOT whole-province deletion.
     """
+    rng = np.random.default_rng(seed)
     mask = np.zeros(len(y_test), dtype=bool)
     for i, prov in enumerate(province_codes):
-        if prov in high_missing_provs:
-            mask[i] = np.random.random() < high_rate
-        else:
-            mask[i] = np.random.random() < low_rate
+        rate = high_rate if prov in high_missing_provs else low_rate
+        mask[i] = rng.random() < rate
     return mask
 
 
@@ -140,10 +157,13 @@ def run_missingness_simulation():
         if r['Method'] == 'Proposed':
             print(f"   Proposed: Acc={r['Accuracy']:.4f}, F1={r['Macro_F1']:.4f}, JS={r['JS_Div']:.6f}")
 
-    # Scenario 2: MAR (high FatER → more missing)
-    print("\n[4/4] 场景 2: MAR (高脂肪供能比 → 更容易缺失)")
-    np.random.seed(42)
-    mask_mar = simulate_mar_missing(y_test, X_original, feature_idx=0, alpha=5.0, base_rate=0.3)
+    # Scenario 2: MAR (logistic in FatER)
+    print("\n[4/4] 场景 2: MAR logit(P)=beta0+beta1*z(FatER)")
+    mask_mar, mar_params = simulate_mar_missing(
+        y_test, X_original, feature_idx=0, beta1=2.0, base_rate=0.3, seed=42
+    )
+    print(f"   MAR params: beta0={mar_params['beta0']:.4f}, beta1={mar_params['beta1']:.4f}, "
+          f"realized={mar_params['realized_rate']:.4f}")
     results_mar = evaluate_missingness_scenario(
         X_test, y_test, province_test, model, mask_mar, "MAR (FatER)"
     )
@@ -154,11 +174,10 @@ def run_missingness_simulation():
 
     # Scenario 3: Spatial missing
     print("\n[5/5] 场景 3: Spatial Missing (直辖市缺失率 50% vs 其他 20%)")
-    np.random.seed(42)
     mask_spatial = simulate_spatial_missing(
         y_test, province_test,
         high_missing_provs=[11, 31, 55],  # Beijing, Shanghai, Chongqing
-        high_rate=0.5, low_rate=0.2
+        high_rate=0.5, low_rate=0.2, seed=42
     )
     results_spatial = evaluate_missingness_scenario(
         X_test, y_test, province_test, model, mask_spatial, "Spatial"
@@ -181,10 +200,38 @@ def run_missingness_simulation():
     df_all.to_csv("./results/missingness_simulation.csv", index=False)
     print("\n✅ 结果已保存至: results/missingness_simulation.csv")
 
+    # Explicit mechanism parameters for manuscript Methods
+    mech = pd.DataFrame([
+        {
+            "mechanism": "MCAR",
+            "formula": "P(R=1)=0.30 (independent of covariates/labels)",
+            "beta0": np.nan,
+            "beta1": np.nan,
+            "realized_rate": float(mask_mcar.mean()),
+            "note": "Simple random masking on held-out test labels",
+        },
+        {
+            "mechanism": "MAR",
+            "formula": "logit(P(R=1|FatER))=beta0+beta1*z(FatER)",
+            "beta0": mar_params["beta0"],
+            "beta1": mar_params["beta1"],
+            "realized_rate": mar_params["realized_rate"],
+            "note": f"z=(FatER-{mar_params['fat_mean']:.4f})/{mar_params['fat_sd']:.4f}",
+        },
+        {
+            "mechanism": "Spatial",
+            "formula": "P(R=1|Province)=0.50 if BJ/SH/CQ else 0.20",
+            "beta0": np.nan,
+            "beta1": np.nan,
+            "realized_rate": float(mask_spatial.mean()),
+            "note": "Observation-level province-specific rates (not whole-province deletion)",
+        },
+    ])
+    mech.to_csv("./results/missingness_mechanism_params.csv", index=False)
+    print("Wrote results/missingness_mechanism_params.csv")
+
     return df_all
 
 
 if __name__ == "__main__":
-    import os
-
     df_all = run_missingness_simulation()

@@ -616,75 +616,18 @@ def apply_cover(m):
 
 
 def apply_supplementary(m):
-    fix_supplementary_s7_s8(m)
+    """Rebuild Supplementary from cited content only (see update_supplementary_docx.py)."""
+    import subprocess
+    import sys
+
+    r = subprocess.run([sys.executable, "-u", str(ROOT / "update_supplementary_docx.py")], cwd=ROOT)
+    if r.returncode != 0:
+        raise SystemExit("update_supplementary_docx.py failed")
 
 
 def apply_supplementary_legacy(m):
-    doc = Document(str(SUPP))
-    b = m["binary"]
-    s7_hdr = [
-        "Scenario", "N (test)", "Accuracy", "Macro-F1", "Weighted-F1",
-        "Urban recall", "Rural recall", "Rural PPV",
-    ]
-    s7_vals = [
-        "Binary XGBoost", str(int(b["n_test"])), f"{b['accuracy_masked']:.3f}",
-        f"{b['macro_f1_masked']:.3f}", f"{b['weighted_f1_masked']:.3f}",
-        f"{b['urban_recall_masked']:.3f}", f"{b['rural_recall_masked']:.3f}",
-        f"{b['rural_precision_masked']:.3f}",
-    ]
-
-    if not any("Supplementary Table S7" in p.text for p in doc.paragraphs):
-        doc.add_paragraph(
-            "Supplementary Table S7. Binary administrative classification (Rural vs. Urban, excluding "
-            "Transitional observations) under 30% simulated missingness."
-        )
-        table = doc.add_table(rows=2, cols=len(s7_hdr))
-        for i, h in enumerate(s7_hdr):
-            set_cell_text(table.rows[0].cells[i], h)
-        for i, v in enumerate(s7_vals):
-            set_cell_text(table.rows[1].cells[i], v)
-    else:
-        updated = False
-        for table in doc.tables:
-            hdr = [c.text.strip() for c in table.rows[0].cells]
-            if hdr and hdr[0] == "Scenario":
-                if len(hdr) != len(s7_hdr):
-                    tbl_el = table._element
-                    tbl_el.getparent().remove(tbl_el)
-                    break
-                for i, v in enumerate(s7_vals):
-                    set_cell_text(table.rows[1].cells[i], v)
-                updated = True
-                break
-        if not updated and any("Supplementary Table S7" in p.text for p in doc.paragraphs):
-            doc.add_paragraph(
-                "Supplementary Table S7 (updated). Binary administrative classification (Rural vs. Urban, excluding "
-                "Transitional observations) under 30% simulated missingness."
-            )
-            table = doc.add_table(rows=2, cols=len(s7_hdr))
-            for i, h in enumerate(s7_hdr):
-                set_cell_text(table.rows[0].cells[i], h)
-            for i, v in enumerate(s7_vals):
-                set_cell_text(table.rows[1].cells[i], v)
-
-    if not any("Supplementary Table S8" in p.text for p in doc.paragraphs):
-        doc.add_paragraph(
-            "Supplementary Table S8. Urban probability threshold tuning (three-class model, 30% masked labels)."
-        )
-        thr = pd.read_csv(ROOT / "results/threshold_tuning.csv")
-        t2 = doc.add_table(rows=1 + len(thr), cols=5)
-        h2 = ["Urban threshold", "Overall accuracy", "Macro-F1", "Urban recall", "Rural recall"]
-        for i, h in enumerate(h2):
-            set_cell_text(t2.rows[0].cells[i], h)
-        for ri, (_, row) in enumerate(thr.iterrows(), start=1):
-            set_cell_text(t2.rows[ri].cells[0], f"{row['urban_threshold']:.2f}")
-            set_cell_text(t2.rows[ri].cells[1], f"{row['overall_acc']:.3f}")
-            set_cell_text(t2.rows[ri].cells[2], f"{row['macro_f1']:.3f}")
-            set_cell_text(t2.rows[ri].cells[3], f"{row['urban_recall']:.3f}")
-            set_cell_text(t2.rows[ri].cells[4], f"{row['rural_recall']:.3f}")
-
-    doc.save(str(SUPP))
-    print(f"Updated {SUPP}")
+    """Deprecated: retained for reference; use apply_supplementary()."""
+    return
 
 
 def write_response(m):

@@ -1,46 +1,31 @@
-# Response to Reviewer Concerns (SiM revision)
+# Response to SiM Major/Minor Revisions
 
-## 1. Transitional circularity (Priority 1)
-- **Methods:** Added explicit statement that binary T2 Rural/Urban is the primary inferential target; three-class structure is descriptive only.
-- **Abstract/Results:** Transitional accuracy (0.993) reported as exploratory; main evaluation reframed around binary task (accuracy 0.716).
-- **Discussion – Limitations:** Circularity listed as first limitation.
+## Major 1 — Elevating methodological contribution
+- Reframed Introduction around **three protocol pillars**: (1) simulated missingness internal validation; (2) separating predictive accuracy from downstream inferential preservation; (3) spatiotemporal generalisability.
+- Added a **Protocol application guide** in the Discussion for reuse on other surveys.
+- Contribution positioned as a reusable evaluation blueprint, with CHNS as the illustrative testbed (not as an XGBoost methods paper).
 
-## 2. Low Urban accuracy (0.421)
-- **Results:** Added paragraph on dietary heterogeneity in urban areas.
-- **Discussion:** Reframed framework as screening / probabilistic weighting tool.
-- **New analysis:** Urban probability threshold tuning (S8); Urban recall 0.58–0.66 at thresholds 0.40–0.35.
+## Major 2 — Missingness mechanisms
+- New subsection **Missing Data Mechanisms and Simulation**.
+- **MCAR**: independent Bernoulli masking with π = 0.30 on the held-out test set.
+- **MAR**: logit{P(R=1|FatER)} = β₀ + β₁ z(FatER) with β₁ = 2.0, β₀ = -1.354, realised rate 0.300.
+- **Spatial**: observation-level rates 0.50 (Beijing/Shanghai/Chongqing) vs 0.20 otherwise (not province deletion).
+- Parameters saved in `results/missingness_mechanism_params.csv`; scripts: `missingness_simulation.py`.
 
-## 3. MICE implementation
-- **Methods:** Replaced continuous IterativeImputer with iterative multinomial logistic regression for categorical outcomes.
-- **Results:** MICE accuracy updated to 0.673 (from 0.393).
-- **Discussion:** Added interpretation regarding non-linear structure.
+## Major 3 — Metric rationale
+- Calibration: framed as enabling **IPW / multiple imputation** reuse of class probabilities, not only fit diagnostics.
+- JS divergence: stated as **necessary but not sufficient** (margins ≠ joints); temporal/spatial/downstream checks retained.
 
-## 4. Statistical innovation / SiM fit
-- **Introduction/Abstract:** Reframed contribution as multi-dimensional **evaluation protocol**, not optimal prediction claim.
-- **Title:** Updated to emphasize statistical evaluation protocol.
+## Major 4 — Downstream adjusted analysis
+- New analysis: OLS of macronutrients on Urban vs Rural, adjusting for **Year + Province** (age/sex unavailable in diet extract).
+- FatER Urban coefficient: true 0.0697 (SE 0.0020) vs imputed 0.0869 (SE 0.0020); relative change 24.6% (Supplementary Table S10).
+- Script: `downstream_adjusted_regression.py`.
 
-## 5. Downstream effect size wording
-- **Table 8:** Renamed "Bias (%)" to "Relative Change in Cohen's d (%)".
-- **Results/Discussion:** "Bias" replaced with "inflation/amplification" language; clarified mechanism via Transitional reassignment.
+## Major 5 — Table S9 fragility → primary binary task
+- Results now highlight accuracy drop from 0.782 ([0.23,0.30]) to 0.679 ([0.25,0.32]).
+- Discussed as evidence that predictor-defined hard thresholds make multi-class accuracy unstable; binary T2 task remains primary (accuracy 0.716).
 
-## 6. New analyses
-- **Binary model (S7):** Rural vs. Urban excluding transitional stratum.
-- **Threshold tuning (S8):** Application-specific Urban probability cut-offs.
-
-## 7. Cover letter
-- Added clarifications on three-category rationale, circularity, Urban accuracy, and SiM scope.
-
-## 8. Second-round revisions
-- **Binary metrics:** Added weighted-F1 (0.698) and rural PPV (0.740); reframed as high-specificity rural screening tool.
-- **Accuracy comparison:** Explained three-class (0.786) vs binary (0.716) difference.
-- **Methods:** Added binary model training paragraph.
-- **Discussion:** Consolidated comparison paragraphs; split Strengths/Limitations subsections.
-- **Duplicates:** Removed repeated downstream results paragraph.
-- **Cover letter:** Binary accuracy stated as primary evaluation metric.
-- **Note:** Figure captions (1–5) are present; embedded images should be verified in Word before submission.
-
-## 9. Third-round fine tuning
-- **Principal Findings:** Clarified three-class vs binary accuracy wording.
-- **Discussion headings:** Standardised `### Strengths` and `### Limitations`; removed blank/orphan paragraphs.
-- **Supplementary S7/S8:** Rebuilt as contiguous caption-table blocks.
-- **Cover letter:** Removed residual "modest Urban accuracy" phrasing.
+## Minor
+- Fig S1 caption expanded (colour scale; vertical jitter).
+- Terminology: label recovery phrased as **imputation/prediction**; “inference” reserved for parameter estimation / protocol pillars where appropriate.
+- GitHub (`tyrone1979/nutri2-urban`) includes scripts regenerating S9/S10 and mechanism parameters.

@@ -1,0 +1,4 @@
+mechanism,formula,beta0,beta1,realized_rate,note
+MCAR,P(R=1)=0.30 (independent of covariates/labels),,,0.2992249583047189,Simple random masking on held-out test labels
+MAR,logit(P(R=1|FatER))=beta0+beta1*z(FatER),-1.3537406536952021,2.0,0.29996075738251743,z=(FatER-0.2754)/0.1196
+Spatial,P(R=1|Province)=0.50 if BJ/SH/CQ else 0.20,,,0.21264593348376337,Observation-level province-specific rates (not whole-province deletion)
